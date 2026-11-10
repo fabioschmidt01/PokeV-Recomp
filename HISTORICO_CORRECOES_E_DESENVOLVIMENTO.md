@@ -244,6 +244,43 @@ Foram portadas e sincronizadas as seguintes melhorias críticas originárias do 
 | `cfbbeab` | - | `fix(kernel): initialize tpidr with thread local region to prevent TLS crash in malloc` | Correção do crash `c0000005 accessing 0x30`. Inicialização correta de `tpidr_el0` e expansão do pool TLS para 4 MB. |
 | `fe0cd1a` | `v0.0.2` | `docs: add comprehensive development and bugfix history document` | Documentação inicial e release v0.0.2. |
 | `c612890` | `v0.0.3` | `fix(hle): add HLE malloc/free allocator and sync stability features from Arceus` | Correção do crash `c0000005 accessing 0` via alocador HLE em `libc.c` e sincronização total de melhorias de estabilidade do Arceus. |
+| `a0e5146` | `v0.0.4` | `fix(hle): route post-startup malloc/free to CentralHeap and stub assertion breaks` | Resolução do trap em `nnmem_nlib_debug_break` (`NotNMallocPtrError`): roteamento dinâmico pós-startup para o alocador nativo do jogo via `game_heap_ready()`. |
+
+---
+
+## 11. Crash #3: FATAL undefined instruction / trap em 7008318020 (NotNMallocPtrError)
+
+### A. Diagnóstico e Causa Raiz
+Na versão `v0.0.3`, o jogo passou com sucesso por toda a inicialização de módulos (`init sdk`, `init subsdk0`, chamadas IPC de todos os serviços de sistema e 2.133 construtores globais de `init main`). Logo em seguida, ocorreu o erro fatal:
+```
+FATAL: undefined instruction / trap at 7008318020
+host pc ... (rt_udf)
+guest: sp=723ffffb20 lr=7008323ee4
+x0  0000007092000a50  x1  0000007092000a50
+```
+
+**Análise de Engenharia Reversa:**
+1. O endereço `0x7008318020` no módulo `sdk` é a função `nnmem_nlib_debug_break`, cujo código assembly ARM64 consiste em:
+   ```arm64
+   0x7008318020: udf #0xdefe
+   0x7008318024: ret
+   ```
+   O recompilador traduziu a instrução `udf #0xdefe` para `rt_udf(c, 0x7008318020)`, interrompendo a execução.
+2. A rotina chamadora em `lr = 0x7008323ee4` é `nn::nlibsdk::heap::CentralHeap::GetAllocSize(void const*)`.
+3. Ao inspecionar `CentralHeap::GetAllocSize`, a rotina calcula se o ponteiro recebido em `x1` (`0x7092000a50`) pertence ao intervalo de páginas do `CentralHeap` gerenciado pelo jogo:
+   ```arm64
+   sub  x9, x1, x8
+   cmp  x9, x10
+   b.hs NotNMallocPtrError
+   ```
+4. Como `0x7092000a50` pertencia ao `HLE_HEAP` (alocado pelo nosso `hle_malloc`), ele falhou no teste de pertencimento ao `CentralHeap`, chamando `NotNMallocPtrError(ptr)`, que disparou o trap.
+
+### B. Solução Implementada: Roteamento de Duas Fases em `runtime/hle/libc.c`
+Implementamos a verificação atômica `game_heap_ready()` baseada no ponteiro global do alocador do jogo em `0x7004759418`:
+- **Fase de Bootstrap (pré-startup, `*0x7004759418 == 0`)**: As alocações do construtor do SDK são atendidas com segurança no `HLE_HEAP`, impedindo a desreferência de ponteiro nulo (`c0000005`).
+- **Fase de Execução Normal (pós-startup, `*0x7004759418 != 0`)**: Chamadas a `malloc`, `calloc`, `realloc`, `free`, `memalign`, `aligned_alloc` e `posix_memalign` são encaminhadas diretamente para as rotinas nativas do executável do jogo (`f_7002b7d830`), garantindo que todos os ponteiros pertençam legitimamente ao `CentralHeap`.
+- **Proteção em `free` / `realloc`**: Ponteiros gerados durante a fase de bootstrap no `HLE_HEAP` são ignorados no `free` e realocados transparentemente para o `CentralHeap` no `realloc`.
+- **Stubs de Proteção HLE**: Registrados stubs não-fatais para `nnmem_nlib_debug_break` e `NotNMallocPtrError`, garantindo que eventuais asserções do SDK não encerrem o processo abruptamente.
 
 ---
 
