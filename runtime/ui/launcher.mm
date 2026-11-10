@@ -273,7 +273,7 @@ static void *upd_thread(void *) {
         if (!p || plat_proc_wait(p, true) != 0) return upd_fail("the zip couldn't be unpacked"), (void *)NULL;
     }
     fs::path src = u8p(work) / u8p("ZA Recomp");
-    if (!fs::exists(src / "lasrecomp.exe")) return upd_fail("the zip isn't a ZA Recomp release"), (void *)NULL;
+    if (!fs::exists(src / "PokeV-Recomp.exe") && !fs::exists(src / "lasrecomp.exe")) return upd_fail("the zip isn't a PokeV-Recomp release"), (void *)NULL;
     g_upd_state = UPD_INSTALL;
     // every file first: a half-moved update would mix two versions - moves only once the list is complete
     std::vector<fs::path> files;

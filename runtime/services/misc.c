@@ -98,21 +98,18 @@ SERVICE("prepo:s", prepo_s) { prepo_service(s, req, resp); }
 
 // ------------------------------------------------------------------ btm:u / btm:m / btm:s / btm / bt
 // Bluetooth manager: Pokémon Scarlet & Violet initializes the Bluetooth user interface (InitializeBtmUserInterface)
-// at boot to communicate with Pokémon GO Plus+ and wireless accessories. The logging stub previously returned no
-// IBtmUserCore object, causing the SDK to abort on result 0x0 at boot.
+// and acquires the BLE scan event (AcquireBleScanEvent) at boot to communicate with Pokémon GO Plus+ and wireless accessories.
+// Switchbrew cmd 23 (AcquireBleScanEvent) and other BLE event acquisition commands return:
+//   - An auto-clear Event handle in copy_handles
+//   - An output boolean (1 = true) in the response buffer (out_bool == 0 causes user process to abort)
 static void btm_user_core(Service *s, IpcReq *req, IpcResp *resp) {
     (void)s;
     resp->result = 0;
-    switch (req->cmd) {
-    case 0: case 1: case 2: case 3: case 4: case 5:
-        // BLE events (AcquireBleScanEvent, AcquireBleConnectionEvent, etc.): return non-signalled event handles
-        resp->copy_handles[resp->ncopy++] = new_event_handle();
-        break;
-    default:
-        LOG("[btm] IBtmUserCore cmd %u (ok)\n", req->cmd);
-        resp_size(resp, 0x10);
-        break;
-    }
+    resp->copy_handles[resp->ncopy++] = new_event_handle();
+    OUT(uint8_t, 0) = 1;
+    OUT(uint32_t, 0) = 1;
+    resp_size(resp, 4);
+    LOG("[btm] IBtmUserCore cmd %u (ok, event returned)\n", req->cmd);
 }
 
 static void btm_service(Service *s, IpcReq *req, IpcResp *resp) {
@@ -153,15 +150,11 @@ SERVICE("bt", bt) { bt_service(s, req, resp); }
 static void bcat_general(Service *s, IpcReq *req, IpcResp *resp) {
     (void)s;
     resp->result = 0;
-    switch (req->cmd) {
-    case 0: case 1: case 2: case 3:
-        resp->copy_handles[resp->ncopy++] = new_event_handle();
-        break;
-    default:
-        LOG("[bcat] IServiceForGeneral cmd %u (ok)\n", req->cmd);
-        resp_size(resp, 0x10);
-        break;
-    }
+    resp->copy_handles[resp->ncopy++] = new_event_handle();
+    OUT(uint8_t, 0) = 1;
+    OUT(uint32_t, 0) = 1;
+    resp_size(resp, 4);
+    LOG("[bcat] IServiceForGeneral cmd %u (ok)\n", req->cmd);
 }
 
 static void bcat_service(Service *s, IpcReq *req, IpcResp *resp) {

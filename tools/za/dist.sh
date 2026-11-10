@@ -92,8 +92,8 @@ if [ ! -f "$SRC_FF" ]; then
     done
 fi
 bash tools/build_deps_windows.sh
-make -j"$(nproc)" B=$B DEPS="$PWD/build/deps-win" RELEASE=1 GENARCH="$GENARCH" GENOPT="$GENOPT" $B/lasrecomp.exe
-! nm $B/lasrecomp.exe | grep -q ' f_70'  # (no game code inside)
+make -j"$(nproc)" B=$B DEPS="$PWD/build/deps-win" RELEASE=1 GENARCH="$GENARCH" GENOPT="$GENOPT" $B/PokeV-Recomp.exe
+! nm $B/PokeV-Recomp.exe | grep -q ' f_70'  # (no game code inside)
 FLAGS=$(make -s --eval='pv: ; @echo $(strip $(filter-out -Iruntime,$(GENFLAGS)))' B=$B GENARCH="$GENARCH" GENOPT="$GENOPT" pv)
 bash tools/zig_slim.sh $FLAGS
 # 4. the game file importer (self-contained: no .NET needed on the player's machine)
@@ -102,7 +102,8 @@ dotnet publish tools/zaimport -c Release -r win-x64 --self-contained true -p:Pub
 
 # 5. the folder
 rm -rf build/dist-za && mkdir -p "$D/gamelib-src" "$D/zaimport"
-cp $B/lasrecomp.exe $B/lasrecomp.dll.a "$D/"
+cp $B/PokeV-Recomp.exe $B/PokeV-Recomp.dll.a "$D/"
+cp $B/PokeV-Recomp.dll.a "$D/lasrecomp.dll.a" 2>/dev/null || true
 cp -R build/helper/lasgen "$D/"
 cp -R build/helper/zaprompts "$D/"
 cp third_party/ooz/COPYING "$D/zaprompts/COPYING-GPLv3.txt"
@@ -122,7 +123,7 @@ cp docs/XBOX-ATTACK-LAYOUT.md "$D/docs/"
 [ -f third_party/xess/bin/libxell.dll ] && cp third_party/xess/bin/libxell.dll "$D/"
 cp tools/za/za-default.ini "$D/za-default.ini"  # (not larecomp.ini: the first run copies it, runtime/paths.c - a new zip unzipped over an install keeps the player's own)
 # (every DLL but Windows' own and the Vulkan loader: also when copies sit next to the exe in $B, a dev setup)
-PATH="$PWD/build/deps-win/bin:$PATH" ldd $B/lasrecomp.exe | awk 'tolower($3) !~ /^\/c\/windows\// && !/vulkan-1/ {print $3}' | sort -u |
+PATH="$PWD/build/deps-win/bin:$PATH" ldd $B/PokeV-Recomp.exe | awk 'tolower($3) !~ /^\/c\/windows\// && !/vulkan-1/ {print $3}' | sort -u |
     while read -r f; do cp "$f" "$D/"; done
 ! ls "$D" | grep -iE 'x264|x265|xvid|postproc'  # (no GPL codec libraries in the release)
 du -sh "$D"

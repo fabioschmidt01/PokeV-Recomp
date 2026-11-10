@@ -359,5 +359,43 @@ host backtrace:
    - O arquivo `extracted/recomp_state.ini` encontra-se travado (`locked = 1`), permitindo abrir `lasrecomp.exe` e entrar diretamente no jogo sem qualquer recompilação.
 
 ---
+---
+
+## 14. Correção Definitiva: Unificação do Executável `PokeV-Recomp.exe` e Fix de `AcquireBleScanEvent`
+
+### A. Diagnóstico do Crash em `AcquireBleScanEvent` (Log 30568.log)
+Na versão anterior, o jogo inicializou com sucesso a interface Bluetooth (`InitializeBtmUserInterface`), mas abortou logo na sequência em `guest #2 70080b9028`:
+```text
+[sm] GetService bt
+[sm] GetService btm:u
+[am] IApplicationFunctions cmd 22 (unhandled, ok)
+[kernel] abort on result 0x0 (2000-0)
+  guest #2 70080b9028
+```
+
+**Engenharia Reversa da Rotina (`_ZN2nn3btm4user19AcquireBleScanEventEPNS_2os15SystemEventTypeE`):**
+1. O jogo invoca o comando IPC `23` (`AcquireBleScanEvent`) em `IBtmUserCore`.
+2. O assembly ARM64 do SDK checa explicitamente o valor booleano retornado no buffer IPC:
+   ```arm64
+   0x70080b8fe4: ldrb w8, [x29, #0x1c]   ; Lê o booleano de sucesso retornado pelo serviço
+   0x70080b8fe8: cbz  w8, #0x70080b9010  ; Se for ZERO (falso), salta para o Abort em 0x70080b9028!
+   ```
+3. A implementação anterior retornava o handle do evento, mas deixava o buffer de dados vazio (0). O SDK interpretou que a aquisição do scanner BLE falhou e disparou o aborto intencional.
+
+**Correção em `runtime/services/misc.c`:**
+- Configurado `OUT(uint8_t, 0) = 1` e `OUT(uint32_t, 0) = 1` com `resp_size(resp, 4)` e handle de evento válido em `copy_handles`.
+
+### B. Transição Arquitetural Completa para `PokeV-Recomp.exe`
+Conforme solicitado pelo desenvolvedor, o projeto agora possui **um único executável oficial**, sem depender de atalhos ou de `lasrecomp.exe`:
+1. **Makefile**:
+   - `EXE := $(B)/PokeV-Recomp.exe`
+   - Biblioteca de exportação gerada diretamente como `$(B)/PokeV-Recomp.dll.a`.
+   - `GAMELIB_LDFLAGS` configurado para linkar diretamente contra `PokeV-Recomp.dll.a`.
+2. **dist.sh**:
+   - Empacotamento direto do binário `PokeV-Recomp.exe` e `PokeV-Recomp.dll.a`.
+3. **gamebuild.c**:
+   - `find_tools` busca primordialmente por `PokeV-Recomp.dll.a`.
+
+---
 
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
