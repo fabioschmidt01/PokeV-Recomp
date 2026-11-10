@@ -35,3 +35,69 @@ void hle_strncmp(Cpu *c) {
     c->x[0] = (uint64_t)((int64_t)*a - (int64_t)*b);
 }
 void hle_memchr(Cpu *c) { c->x[0] = (uint64_t)(uintptr_t)memchr(P(0), (int)(uint8_t)c->x[1], c->x[2]); }
+
+// ------------------------------------------------------------------ HLE Allocator
+// The SDK and musl call malloc/calloc during DT_INIT before nninitStartup has initialized
+// the main game heap (0x7004759418). Intercepting these symbols with HLE ensures early
+// allocations are satisfied safely from the guest-visible HLE_HEAP pool.
+
+static void *hle_malloc_internal(size_t size) {
+    if (!size) size = 1;
+    size_t total = (size + 15 + 16) & ~15ull;
+    uint8_t *p = (uint8_t *)hle_alloc(total);
+    if (!p) return NULL;
+    *(uint64_t *)p = size;
+    return p + 16;
+}
+
+HLE_FUNC("malloc", hle_malloc) {
+    uint64_t size = c->x[0];
+    c->x[0] = (uint64_t)(uintptr_t)hle_malloc_internal(size);
+}
+
+HLE_FUNC("calloc", hle_calloc) {
+    uint64_t n = c->x[0], sz = c->x[1];
+    c->x[0] = (uint64_t)(uintptr_t)hle_malloc_internal(n * sz);
+}
+
+HLE_FUNC("realloc", hle_realloc) {
+    uint64_t ptr = c->x[0], size = c->x[1];
+    if (!ptr) {
+        c->x[0] = (uint64_t)(uintptr_t)hle_malloc_internal(size);
+        return;
+    }
+    void *np = hle_malloc_internal(size);
+    if (np && size) {
+        size_t old_size = size;
+        if (ptr >= HLE_HEAP && ptr < HLE_HEAP + HLE_HEAP_SIZE) {
+            old_size = *(uint64_t *)((uint8_t *)(uintptr_t)ptr - 16);
+            if (old_size > size) old_size = size;
+        }
+        memcpy(np, (void *)(uintptr_t)ptr, old_size);
+    }
+    c->x[0] = (uint64_t)(uintptr_t)np;
+}
+
+HLE_FUNC("free", hle_free) {
+    (void)c;
+}
+
+HLE_FUNC("memalign", hle_memalign) {
+    uint64_t align = c->x[0], size = c->x[1];
+    (void)align;
+    c->x[0] = (uint64_t)(uintptr_t)hle_malloc_internal(size);
+}
+
+HLE_FUNC("aligned_alloc", hle_aligned_alloc) {
+    uint64_t align = c->x[0], size = c->x[1];
+    (void)align;
+    c->x[0] = (uint64_t)(uintptr_t)hle_malloc_internal(size);
+}
+
+HLE_FUNC("posix_memalign", hle_posix_memalign) {
+    uint64_t out_ptr = c->x[0], align = c->x[1], size = c->x[2];
+    (void)align;
+    void *p = hle_malloc_internal(size);
+    if (out_ptr) *(uint64_t *)(uintptr_t)out_ptr = (uint64_t)(uintptr_t)p;
+    c->x[0] = p ? 0 : 12;
+}
