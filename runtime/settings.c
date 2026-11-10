@@ -38,7 +38,7 @@ bool gpu_feature_on(int feature, const char *env) {
 }
 
 Settings g_settings = {
-    .aspect = ASPECT_UNLOCKED,
+    .aspect = ASPECT_ORIGINAL,
     .fullscreen = false,
     .volume = 1.0f,
     .reverb = true,
@@ -52,7 +52,7 @@ Settings g_settings = {
     .tex_hd = true,
     .shadow_res = 1,
     .shadow_sharp = 1,
-    .gtao = 1,
+    .gtao = 0,
     .gtao_strength = 100,
     .ssgi_strength = 100,
     .xess_quality = 3,

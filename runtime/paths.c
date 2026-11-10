@@ -96,7 +96,7 @@ static bool writable(const char *dir) {
 
 static void fail(const char *msg) {
     fprintf(stderr, "%s\n", msg);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "PLA Recomp", msg, NULL);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "PokeV-Recomp", msg, NULL);
     exit(1);
 }
 
@@ -321,11 +321,11 @@ void rt_paths_init(void) {
     char msg[1400];
     if (!is_dir(root) || !writable(root) || chdir(root) != 0) {
 #ifdef _WIN32
-        snprintf(msg, sizeof msg, "PLA Recomp can't write to its folder:\n%s\n\nIt keeps game files and saves "
-                 "next to the program. Move the \"PLA Recomp\" folder somewhere you can write to (e.g. Documents or "
+        snprintf(msg, sizeof msg, "PokeV-Recomp can't write to its folder:\n%s\n\nIt keeps game files and saves "
+                 "next to the program. Move the \"PokeV-Recomp\" folder somewhere you can write to (e.g. Documents or "
                  "Desktop, not Program Files) and start it again.", root);
 #else
-        snprintf(msg, sizeof msg, "PLA Recomp can't write to its data folder:\n%s", root);
+        snprintf(msg, sizeof msg, "PokeV-Recomp can't write to its data folder:\n%s", root);
 #endif
         fail(msg);
     }

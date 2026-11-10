@@ -398,4 +398,34 @@ Conforme solicitado pelo desenvolvedor, o projeto agora possui **um único execu
 
 ---
 
+## 15. Diagnóstico e Correção dos Artefatos Visuais Diagonais (Padrão Tweed / Herringbone nas Malhas 3D)
+
+### A. Diagnóstico Visual e Causa Raiz
+Nas capturas em execução real (cutscene da sala de aula, close-up da personagem com Pokébola e vista aérea do estádio a 60 FPS estáveis na GPU Intel Arc B580), observou-se:
+1. **O céu e elementos 2D (subtítulos e HUD) renderizam limpos e sem defeitos.**
+2. **Todas as superfícies 3D opacas (pele, cabelo, roupas, carteiras da sala, piso e grama do estádio) apresentavam um padrão diagonal de linhas alternadas (dither / interferência de grade).**
+
+**Investigação da Origem:**
+- **Não é falha de UV nem de vértices:** As silhuetas, contornos geométricos, perspectiva e proporções anatômicas estão 100% perfeitos (sem deformações de mesh ou spikes). As linhas mantêm a exata mesma espessura e ângulo de 45° em screen-space tanto no primeiro plano quanto no fundo.
+- **Causa 1: Distorção de Aspecto Não-Uniforme (`aspect = unlocked` -> 2039x1080):**
+  Como a janela rodava em 1920x1017, o cálculo `reshape = (1920 / 1017) / (16 / 9) = 1.062` gerou um alvo de renderização com largura ímpar de `2039x1080`. Como Pokémon Scarlet & Violet não possui patch de câmera widescreen no código convidado, a resolução foi escalonada de forma não-uniforme. Isso forçou cópias de profundidade escaladas via nearest-neighbor (`depth_blit_via_color`) e downscale de caixa (boxdown), gerando interferência Moiré destrutiva sobre a grade de pixels.
+- **Causa 2: Desalinhamento do Guard de Auto-Sombreamento (`shadow_resolution = 2`, `shadow_sharpness = 2`):**
+  O motor gráfico de Pokémon SV projeta um buffer de profundidade e um mapa de IDs de objetos em resolução nativa 1x (1024x1024). Com `shadow_sharpness = 2`, o estreitamento dos 16 taps do filtro causou dessincronização entre as coordenadas do mapa de profundidade e o mapa de IDs de objeto (conforme detalhado em `runtime/nvn/vulkan/exec.c:5580-5586`), falhando o guard nas bordas e superfícies e desenhando estrias escuras na geometria.
+- **Causa 3: Injeção de GTAO (`ambient_occlusion = 1`):**
+  O GTAO injetado foi desenvolvido e calibrado para a estrutura de G-Buffer de Pokémon Legends: Z-A / Link's Awakening. Em Scarlet & Violet, a amostragem desse shader injetava ruído oclusivo na imagem sem temporal blending.
+
+### B. Correções Aplicadas
+1. **Padronização para 16:9 Nativo (`aspect = original`):**
+   - Configurado `.aspect = ASPECT_ORIGINAL` em `runtime/settings.c`, `tools/za/za-default.ini` e `larecomp.ini`.
+   - Garante alvo estritamente 1920x1080 a 100% de escala (sem distorção horizontal de 1.062x nem Moiré em `depth_blit`).
+2. **Desativação de GTAO Incompatível (`ambient_occlusion = 0`):**
+   - Configurado `.gtao = 0` como padrão.
+3. **Restabelecimento dos Mapas de Sombra Nativos 1x (`shadow_resolution = 1`, `shadow_sharpness = 1`):**
+   - Elimina o desalinhamento de taps no guard de auto-sombreamento.
+4. **Atualização da Identidade Visual no HUD:**
+   - Em `runtime/ui/menu.mm` (linha 1329), a legenda do F10 foi atualizada de `"PLA Recomp 0.0.19, jogo 1.1.1"` para `"PokeV-Recomp v0.0.7, jogo 3.0.1"`.
+   - Em `runtime/paths.c`, mensagens de erro de sistema foram renomeadas de `"PLA Recomp"` para `"PokeV-Recomp"`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
