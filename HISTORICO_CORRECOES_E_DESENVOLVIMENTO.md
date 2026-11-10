@@ -283,5 +283,43 @@ Implementamos a verificação atômica `game_heap_ready()` baseada no ponteiro g
 - **Stubs de Proteção HLE**: Registrados stubs não-fatais para `nnmem_nlib_debug_break` e `NotNMallocPtrError`, garantindo que eventuais asserções do SDK não encerrem o processo abruptamente.
 
 ---
+---
 
-*Documento gerado automaticamente pelo assistente de IA Antigravity (Google DeepMind) para documentação contínua do projeto PokeV-Recomp.*
+## 12. Crash #4: Abort on result 0x0 (2000-0) em InitializeBtmUserInterface (btm:u)
+
+### A. Diagnóstico e Causa Raiz
+Na versão `v0.0.4`, o Roteamento de Heap de Duas Fases foi 100% bem-sucedido:
+- Todos os 2.133 construtores de `init main` executaram sem travar em `NotNMallocPtrError`.
+- O jogo adentrou com sucesso em `nnMain`!
+- O sistema de arquivos montou a partição de save (`save/save_0`) 18 vezes com sucesso.
+
+Logo após a inicialização dos subsistemas de áudio e entrada, ocorreu a chamada:
+```
+[sm] GetService btm:u
+[ipc] no HLE implementation for service 'btm:u', using logging stub
+[ipc] STUB btm:u cmd 0 (in 0 bytes, x0 a0 b0 c0) -> ok
+[am] IApplicationFunctions cmd 22 (unhandled, ok)
+[kernel] abort on result 0x0 (2000-0)
+  guest #0 700816b8e8
+  guest #1 700816ba48
+  guest #2 70080b8eb4
+```
+
+**Análise de Engenharia Reversa:**
+1. O endereço `0x70080b8eb4` pertence à função `InitializeBtmUserInterface` (`0x70080b8d10`) no módulo `sdk`.
+2. Essa rotina inicializa a interface de Bluetooth para comunicação com acessórios sem fio (como o Pokémon GO Plus+ no Pokémon Scarlet & Violet).
+3. A rotina envia o comando IPC `cmd 0` (`GetCore`) para o serviço `btm:u`, esperando receber um sub-objeto `IBtmUserCore` (`resp->objects[resp->nobjects++] = sub_service`).
+4. Como `btm:u` era apenas um stub de log genérico (`logging stub`), ele retornava 0 objetos. O SDK leu o endereço do ponteiro do objeto retornado na pilha (`[sp]`), encontrou `NULL` (0x0) e chamou `nn::diag::detail::AbortImpl`, resultando no `svcBreak` / encerramento do processo.
+
+### B. Solução Implementada em `runtime/services/misc.c`
+1. **Implementação HLE de `btm:u`, `btm:m`, `btm:s`, `btm`, `bt`**:
+   - Criada a interface de sub-objeto `IBtmUserCore` retornada pelo comando 0 (`GetCore`).
+   - Fornecidos manipuladores de evento não-sinalizados para comandos de BLE (`AcquireBleScanEvent`, `AcquireBleConnectionEvent`).
+2. **Implementação HLE de `bcat:u`, `bcat:s`, `bcat:a`, `bcat:m`**:
+   - Implementada a interface `IServiceForGeneral` para distribuição de eventos in-game (Mystery Gift, Tera Raids).
+3. **Implementação HLE de `ectx:aw`, `ectx:r`**:
+   - Implementada a interface `IErrorContext` para captura de relatórios de erro do Switch.
+
+---
+
+*Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

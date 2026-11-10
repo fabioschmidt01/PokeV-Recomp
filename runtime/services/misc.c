@@ -96,6 +96,115 @@ SERVICE("prepo:a", prepo_a) { prepo_service(s, req, resp); }
 SERVICE("prepo:m", prepo_m) { prepo_service(s, req, resp); }
 SERVICE("prepo:s", prepo_s) { prepo_service(s, req, resp); }
 
+// ------------------------------------------------------------------ btm:u / btm:m / btm:s / btm / bt
+// Bluetooth manager: Pokémon Scarlet & Violet initializes the Bluetooth user interface (InitializeBtmUserInterface)
+// at boot to communicate with Pokémon GO Plus+ and wireless accessories. The logging stub previously returned no
+// IBtmUserCore object, causing the SDK to abort on result 0x0 at boot.
+static void btm_user_core(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0: case 1: case 2: case 3: case 4: case 5:
+        // BLE events (AcquireBleScanEvent, AcquireBleConnectionEvent, etc.): return non-signalled event handles
+        resp->copy_handles[resp->ncopy++] = new_event_handle();
+        break;
+    default:
+        LOG("[btm] IBtmUserCore cmd %u (ok)\n", req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+
+static void btm_service(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0:  // GetCore -> returns IBtmUserCore
+        ipc_return_object(resp, service_new("IBtmUserCore", btm_user_core, NULL));
+        break;
+    default:
+        LOG("[btm] %s cmd %u (ok)\n", s->name, req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+SERVICE("btm:u", btm_u) { btm_service(s, req, resp); }
+SERVICE("btm:m", btm_m) { btm_service(s, req, resp); }
+SERVICE("btm:s", btm_s) { btm_service(s, req, resp); }
+SERVICE("btm", btm) { btm_service(s, req, resp); }
+
+static void bt_service(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0:
+        ipc_return_object(resp, service_new("IBtService", btm_user_core, NULL));
+        break;
+    default:
+        LOG("[bt] cmd %u (ok)\n", req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+SERVICE("bt", bt) { bt_service(s, req, resp); }
+
+// ------------------------------------------------------------------ bcat:u / bcat:s / bcat:a / bcat:m
+// Background content delivery and in-game distribution events (Mystery Gift, Tera Raid events):
+static void bcat_general(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0: case 1: case 2: case 3:
+        resp->copy_handles[resp->ncopy++] = new_event_handle();
+        break;
+    default:
+        LOG("[bcat] IServiceForGeneral cmd %u (ok)\n", req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+
+static void bcat_service(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0: case 1: case 2:
+        ipc_return_object(resp, service_new("IServiceForGeneral", bcat_general, NULL));
+        break;
+    default:
+        LOG("[bcat] %s cmd %u (ok)\n", s->name, req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+SERVICE("bcat:u", bcat_u) { bcat_service(s, req, resp); }
+SERVICE("bcat:s", bcat_s) { bcat_service(s, req, resp); }
+SERVICE("bcat:a", bcat_a) { bcat_service(s, req, resp); }
+SERVICE("bcat:m", bcat_m) { bcat_service(s, req, resp); }
+
+// ------------------------------------------------------------------ ectx:aw / ectx:r
+static void ectx_context(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    resp_size(resp, 0x10);
+}
+
+static void ectx_service(Service *s, IpcReq *req, IpcResp *resp) {
+    (void)s;
+    resp->result = 0;
+    switch (req->cmd) {
+    case 0: case 1:
+        ipc_return_object(resp, service_new("IErrorContext", ectx_context, NULL));
+        break;
+    default:
+        LOG("[ectx] %s cmd %u (ok)\n", s->name, req->cmd);
+        resp_size(resp, 0x10);
+        break;
+    }
+}
+SERVICE("ectx:aw", ectx_aw) { ectx_service(s, req, resp); }
+SERVICE("ectx:r", ectx_r) { ectx_service(s, req, resp); }
+
 // ------------------------------------------------------------------ csrng
 // GenerateRandomBytes (cmd 0) into the output buffer. Z-A asks it for the seeds of its rolls, hundreds of times a
 // session; the logging stub left the buffer as it was, so every roll came out the same - each ball caught (#61).
