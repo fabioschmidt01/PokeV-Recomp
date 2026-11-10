@@ -321,5 +321,43 @@ Logo após a inicialização dos subsistemas de áudio e entrada, ocorreu a cham
    - Implementada a interface `IErrorContext` para captura de relatórios de erro do Switch.
 
 ---
+---
+
+## 13. Diagnóstico do Log 25676.log: Conflito de Instância Dupla (lasrecomp.exe vs PokeV-Recomp.exe)
+
+### A. Diagnóstico e Causa Raiz
+No log `lasrecomp-backup-01dd70d7f7ce5d3d-25676.log`, ocorreu uma violação de acesso imediata logo no primeiro salto dinâmico do jogo (`f_70082dc200` / `nn::init::Start`):
+```
+*** exception c0000005 accessing 0x2d8627bd798
+    host pc 7ff7ee3232d6 (lasrecomp.exe+32d6)
+    host lr 7ffc87879967 (f_70082dc200)
+host backtrace:
+  #0  00007ff6543c07b8 lasrecomp+b07b8
+  #1  00007ff654312a21 lasrecomp+2a21
+  #2  00007ff654313bc8 lasrecomp+3bc8
+  ...
+  #10 00007ff7ee3232d6 lasrecomp.exe+32d6
+```
+
+**Análise Forense de Engenharia Reversa:**
+1. Note que o backtrace continha **duas instâncias diferentes** do binário do recompilador carregadas na memória do mesmo processo:
+   - Módulo `#0` (base `0x7ff654310000`): O processo principal lançado pelo usuário (`PokeV-Recomp.exe`).
+   - Módulo `#10` (base `0x7ff7ee320000`): Carregado secundariamente pelo Windows (`lasrecomp.exe`).
+2. **A Origem do Conflito**:
+   - A biblioteca de jogo compilada (`extracted/lasgame.dll`) foi gerada com a tabela de importação PE apontando expressamente para `lasrecomp.exe` (definido em `lasrecomp.def` / `lasrecomp.dll.a`).
+   - Ao executar o executável renomeado `PokeV-Recomp.exe`, o carregador de PE do Windows inspeciona as dependências de `lasgame.dll`. Como o processo em execução se chamava `PokeV-Recomp.exe` e não `lasrecomp.exe`, o Windows procurou no disco e encontrou o `lasrecomp.exe`, carregando-o como uma segunda DLL em tempo de execução.
+   - Como `lasrecomp.exe` foi carregado como DLL e não inicializado como processo raiz, o armazenamento local de thread (TLS) da CRT de 64 bits para este módulo nunca foi alocado para a thread do jogo.
+   - No momento em que `f_70082dc200` chamou `rt_dispatch` para consultar a tabela de funções indiretas (`dcache`), a instrução `mov rax, qword ptr [rdx + rax*8]` em `lasrecomp.exe+32d6` tentou acessar a tabela TLS não inicializada, causando a exceção `c0000005`.
+
+### B. Solução Aplicada
+1. **Remoção do Executável Duplicado**:
+   - Removido o arquivo binário redundante `PokeV-Recomp.exe` para eliminar o conflito de importação PE.
+2. **Criação de Atalho Oficial (`PokeV-Recomp.lnk`)**:
+   - Criado o atalho `PokeV-Recomp.lnk` apontando diretamente para `lasrecomp.exe`.
+   - Dessa forma, o Windows sempre executa o processo com o nome canônico `lasrecomp.exe`, garantindo que todas as chamadas de `lasgame.dll` se resolvam no processo primário com TLS e caches perfeitamente inicializados.
+3. **Estado de Compilação Preservado**:
+   - O arquivo `extracted/recomp_state.ini` encontra-se travado (`locked = 1`), permitindo abrir `lasrecomp.exe` e entrar diretamente no jogo sem qualquer recompilação.
+
+---
 
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
