@@ -1326,7 +1326,7 @@ static void perfmon_draw(const ImVec2 &display, float scale) {
                      ram_c(0.80f, 0.45f, 0.70f, 1.0f), fps_c(0.95f, 0.95f, 0.95f, 1.0f),
                      wait_c(0.93f, 0.76f, 0.33f, 1.0f), pic_c(0.62f, 0.70f, 0.95f, 1.0f);
 
-        ImGui::TextDisabled("%s", TR("PokeV-Recomp v0.0.7, game 3.0.1", "PokeV-Recomp v0.0.7, jogo 3.0.1"));
+        ImGui::TextDisabled("%s", TR("PokeV-Recomp v0.0.8, game 3.0.1", "PokeV-Recomp v0.0.8, jogo 3.0.1"));
 
         if (ImGui::BeginTable("##perft", 4, ImGuiTableFlags_SizingFixedFit)) {
             float w0 = ImGui::CalcTextSize(TR("Frame", "Quadro")).x + 8.0f * scale;

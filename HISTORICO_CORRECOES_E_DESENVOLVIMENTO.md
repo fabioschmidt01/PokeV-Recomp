@@ -428,4 +428,46 @@ Nas capturas em execução real (cutscene da sala de aula, close-up da personage
 
 ---
 
+## 16. Correção das Linhas Horizontais / Interlaçadas na Intel Arc (Subgroup Size 32) e Correção da Aceleração 2x a 60 FPS (v0.0.8)
+
+### A. Diagnóstico e Causa Raiz das Linhas Horizontais na Cena 3D (`shot_02083.png`)
+1. **Diferença entre Elementos 2D e Renderização 3D**:
+   Nas capturas em 1:1 (`shot_02083.png`), o mapa 2D (Rotom Map), botões, legendas e o HUD overlay do F10 renderizam de forma cristalina. No entanto, toda a cena 3D ao fundo (personagens, móveis, chão, paredes) apresenta linhas pretas/alternadas a cada 2 pixels (scanlines horizontais).
+2. **Arquitetura Maxwell (GM20B) vs. Intel Arc Xe2 Battlemage (B580)**:
+   Os shaders originais do Nintendo Switch foram compilados para a GPU Maxwell, que opera com **Warps rígidos de 32 threads**. Operações como derivadas quádruplas de tela (`dFdx`/`dFdy`), shuffles de warp (`subgroupShuffle`) e votações de predicados (`subgroupAll`, `subgroupAny`, `subgroupBallot`) assumem que a onda tem 32 pistas simultâneas.
+   Por padrão, o driver Vulkan da Intel Arc compila shaders de fragmento em **SIMD16** (16 pistas).
+   No tradutor de shaders (`runtime/nvn/maxwell/translate.c`), a lógica de emulação de warp (`w32()`) checava `gl_SubgroupSize == 32u`. Como `gl_SubgroupSize` era 16:
+   - `w32()` avaliava como falso;
+   - Os shuffles e derivadas que cruzavam as 32 pistas do warp Maxwell acessavam índices inválidos ou truncados no subgrupo de 16 pistas;
+   - O resultado visual era a perda de coerência entre quads e linhas alternadas pretas/interlaçadas em todas as malhas 3D rasterizadas.
+3. **Solução: Alinhamento Forçado SIMD32 em Shaders de Fragmento**:
+   Em `runtime/nvn/vulkan/exec.c`:
+   - Implementada a função `fs_subgroup32(void)`, que consulta `VkPhysicalDeviceSubgroupSizeControlProperties` do Vulkan 1.3 (`sgp.minSubgroupSize <= 32 && sgp.maxSubgroupSize >= 32 && (sgp.requiredSubgroupSizeStages & VK_SHADER_STAGE_FRAGMENT_BIT)`).
+   - Inserida a estrutura `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo req32_fs` em `PipeCI`, encadeada em `stages[1].pNext` com `requiredSubgroupSize = 32`.
+   - Agora, a GPU Intel Arc compila todos os fragment shaders em SIMD32 nativo, combinando perfeitamente com o modelo de 32 pistas do Maxwell e eliminando os artefatos de interlaçamento.
+
+### B. Diagnóstico e Solução da Aceleração do Jogo a 60 FPS (Velocidade 2x)
+1. **Mecanismo de Delta-Time no Motor da Game Freak em Pokémon SV 3.0.1**:
+   O motor gráfico de Pokémon Scarlet & Violet armazena uma tabela de tempos de quadro em nanossegundos em `.rodata` do módulo `main` (`0x7003c2fba8`):
+   - Modo 0 (`0x7003c2fba8`): `0x00fe502b` = 16.666.667 ns (1/60 s, modo 60 FPS nativo)
+   - Modo 1 (`0x7003c2fbb0`): `0x01fca056` = 33.333.334 ns (1/30 s, modo 30 FPS padrão)
+   Na rotina do relógio principal (`f_7002b79d74`), a instrução em `0x7002b7a858` (`ldrsb w20, [x10, #0x20]`) carrega o modo desejado (`w20 = 1`).
+   Em seguida:
+   - `0x7002b7a874`: `add w1, w20, #1` calcula o intervalo de apresentação da janela NVN (`w1 = 1 + 1 = 2`, ou seja, 30 Hz).
+   - A rotina passa `w20 = 1` como parâmetro para todos os slots de relógio do jogo (slot 0, slot 1, slot 2 e slot 3).
+   Ao forçar a taxa de quadros para 60 FPS, a tela passa a renderizar 60 frames por segundo, mas como `w20` permanecia `1` (33.33 ms por frame), o jogo acumulava 60 * 33.33 ms = **2.0 segundos de tempo de jogo a cada 1.0 segundo real** (jogo em fast-forward 2x).
+2. **Implementação do Hook em `tools/sv_patches.py`**:
+   Implementada a função `_sv_frame_pace(gen, a)` interceptando o endereço `0x7002b7a858`:
+   - Quando `rt_pla_is_60fps()` está ativado: define `c->x[20] = 0` (Modo 0) e atualiza dinamicamente a entrada 1 em `0x7003c2fbb0` para `0x00fe502bull`.
+   - O intervalo de apresentação calculado em `0x7002b7a874` (`w20 + 1`) torna-se automaticamente `0 + 1 = 1` (60 FPS vsync).
+   - Todos os slots de relógio do jogo recebem `w2 = 0`, lendo `16.666.667 ns` por quadro.
+   - O jogo passa a rodar a 60 FPS fluidos em velocidade 1.0x normal, exatamente como o fix desenvolvido no PokeL-ARecomp.
+   - Se o usuário desativar o modo 60 FPS no menu F1, o hook restabelece `w20 = 1` e `33.333.334 ns` instantaneamente.
+
+### C. Otimização de Dispatch e TLS Baseada no PokeL-ARecomp v0.0.23
+- Migração de `dcache` e `jmps` de variáveis globais `__thread` para a estrutura `Cpu` (`c->dcache` e `c->jmps` em `runtime/cpu.h`), eliminando gargalos de thread-local storage e travamentos em CPUs com 24 threads como o Intel Xeon E5-2650 v4.
+- Atualização do F10 HUD overlay para `PokeV-Recomp v0.0.8, jogo 3.0.1`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
