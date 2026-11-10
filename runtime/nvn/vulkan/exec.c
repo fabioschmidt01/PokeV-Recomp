@@ -2760,7 +2760,8 @@ static void pipe_key_fill(PipeKey *k, Prog *pr, const PipeIn *in, const VkFormat
             memcpy(k->blend[i], in->blend[i], 8);
         }
     }
-    k->a2c = in->a2c;
+    const char *a2c_env = ENV("LARECOMP_A2C");
+    k->a2c = a2c_env ? (atoi(a2c_env) != 0) : ((k->samples > 1) ? in->a2c : 0);
     k->topo_class = in->topo_class;
     k->poly_fill = in->poly_fill;
 }
@@ -2805,10 +2806,13 @@ static bool fs_subgroup32(void) {
 
 static void pipe_ci_fill(PipeCI *c, const PipeKey *k) {
     memset(c, 0, sizeof *c);
+    bool use_a2c = (k->samples > 1) ? (k->a2c != 0) : false;
+    const char *a2c_e = ENV("LARECOMP_A2C");
+    if (a2c_e) use_a2c = atoi(a2c_e) != 0;
     c->stages[0] = (VkPipelineShaderStageCreateInfo){.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = k->prog->vs, .pName = "main"};
     c->stages[1] = (VkPipelineShaderStageCreateInfo){.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = k->a2c && k->prog->fs_late ? k->prog->fs_late : k->prog->fs, .pName = "main"};
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = use_a2c && k->prog->fs_late ? k->prog->fs_late : k->prog->fs, .pName = "main"};
     if (fs_subgroup32()) {
         c->req32_fs = (VkPipelineShaderStageRequiredSubgroupSizeCreateInfo){
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
@@ -2841,7 +2845,7 @@ static void pipe_ci_fill(PipeCI *c, const PipeKey *k) {
                                                  .depthClampEnable = k->depth_clamp ? VK_TRUE : VK_FALSE,
                                                  .depthBiasEnable = g_vkc.no_eds2};
     c->ms = (VkPipelineMultisampleStateCreateInfo){.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                                               .rasterizationSamples = (VkSampleCountFlagBits)k->samples, .alphaToCoverageEnable = k->a2c};
+                                               .rasterizationSamples = (VkSampleCountFlagBits)k->samples, .alphaToCoverageEnable = use_a2c ? VK_TRUE : VK_FALSE};
     c->ds = (VkPipelineDepthStencilStateCreateInfo){.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     if (g_vkc.no_eds1) {
         const FixedState *f = &k->fx;
@@ -6364,7 +6368,8 @@ static void rec_from_state(ShaderRec *r, bool flip_x, uint32_t mode) {
         r->depth = st.rt.depth->format;
         if (!r->ncolor && st.rt.depth->samples > 1) r->samples = st.rt.depth->samples;
     }
-    r->a2c = st.ms[0xC] != 0;
+    const char *a2c_r_env = ENV("LARECOMP_A2C");
+    r->a2c = a2c_r_env ? (atoi(a2c_r_env) != 0) : ((r->samples > 1) ? (st.ms[0xC] != 0) : 0);
     r->topo = shader_topo_class(mode);
     r->poly_fill = st.poly[2] != 1;
 }
@@ -6721,8 +6726,10 @@ static void draw_(CmdRec *r, bool indexed) {
     // ---- pipeline
     uint32_t rt_fmt[8] = {0};
     for (int i = 0; i < st.rt.ncolor && i < 8; i++) rt_fmt[i] = st.rt.color[i] ? st.rt.color[i]->format : 0;
+    const char *a2c_draw_env = ENV("LARECOMP_A2C");
+    uint8_t a2c_in = a2c_draw_env ? (atoi(a2c_draw_env) != 0) : ((pass_samples > 1) ? (st.ms[0xC] != 0) : 0);
     const PipeIn in = {st.attrib, st.nattrib, (const uint32_t (*)[2])st.stream, st.nstream, rt_fmt, st.channel_mask,
-                       st.color_state[0], (const uint8_t (*)[8])st.blend, st.ms[0xC] != 0, cls, st.poly[2] != 1};
+                       st.color_state[0], (const uint8_t (*)[8])st.blend, a2c_in, cls, st.poly[2] != 1};
     // the key's parts draw_ adds to pipe_key_fill's: the depth clamp (in depth-only passes - shadow maps: the casters past
     // the light's planes - and in passes without depth - the UI: its quads ask for it, and some lie outside the depth
     // range, the item-count window after using a candy stayed hidden; not in colour passes with depth: Vulkan's clamp

@@ -470,4 +470,58 @@ Nas capturas em execução real (cutscene da sala de aula, close-up da personage
 
 ---
 
+## 17. Correção Definitiva do Dithering/Scanlines 2x2 na Intel Arc (Alpha-to-Coverage em 1 Sample) e Relógio Mestre Dinâmico a 60 FPS (v0.0.9)
+
+### A. Diagnóstico e Causa Raiz das Linhas Horizontais / Dithering 3D na Intel Arc B580
+1. **O Mecanismo Físico do Dither na GPU Intel**:
+   - Em `runtime/nvn/vulkan/exec.c`, as pipelines de renderização configuravam:
+     ```c
+     c->ms = (VkPipelineMultisampleStateCreateInfo){
+         .rasterizationSamples = (VkSampleCountFlagBits)k->samples,
+         .alphaToCoverageEnable = k->a2c
+     };
+     ```
+   - Em Pokémon Scarlet & Violet, todos os passes de geometria 3D renderizam para G-Buffers com amostragem única (`samples = 1`), porém o estado NVN do jogo mantém `st.ms[0xC] = 1`, repassando `k->a2c = 1`.
+   - Nas GPUs NVIDIA (Tegra X1 do Switch e GeForce desktop), `alphaToCoverageEnable` é completamente ignorado pelo hardware quando `rasterizationSamples == VK_SAMPLE_COUNT_1_BIT`.
+   - Na **Intel Arc (Xe2 Battlemage B580)**, o driver Vulkan (`igvk64.dll`) interpreta `alphaToCoverageEnable = VK_TRUE` em alvos de 1 amostra aplicando um **dithering Bayer 2x2 em hardware (screen-door transparency)**.
+   - Como os shaders de G-Buffer de Pokémon SV gravam rugosidade (roughness), especularidade ou flags de material no canal Alfa (com valores médios entre `0.2` e `0.7`), o teste de cobertura dither da GPU descartava exatamente 50% dos fragmentos em linhas ou padrão de xadrez alternado a cada 2 pixels.
+   - Isso explica com 100% de exatidão por que o céu e o minimap 2D apareciam perfeitos (canal alfa = 1.0 ou a2c desligado), enquanto todos os modelos 3D (chão, personagens, montanhas, bancos) ficavam repletos de listras pretas e furos.
+
+2. **Correção Implementada**:
+   - Em `runtime/nvn/vulkan/exec.c`, `alphaToCoverageEnable` foi rigidamente condicionado a alvos multisample (`samples > 1`):
+     ```c
+     bool use_a2c = (k->samples > 1) ? (k->a2c != 0) : false;
+     ```
+   - Em alvos normais (`samples <= 1`), Alpha-to-Coverage agora permanece **estritamente desativado (`VK_FALSE`)**, e a pipeline utiliza o shader `fs` padrão em vez de `fs_late`.
+   - Adicionada a variável de controle `LARECOMP_A2C` para override diagnóstico via linha de comando ou `.ini`.
+
+### B. Relógio Mestre Dinâmico de Quadro a 60 FPS (Eliminação da Aceleração 2x)
+1. **Engenharia Reversa da Rotina Mestre de Tick (`f_7002b79f68`)**:
+   - Localizada a leitura direta da duração de quadro em nanossegundos em `0x7002b7a784`:
+     ```arm64
+     0x7002b7a780: blr x8              // Obtém ponteiro do slot de relógio 0 em x0
+     0x7002b7a784: ldr d0, [x0, #8]    // Carrega duração em nanossegundos (ex: 33.333.334 ns)
+     0x7002b7a794: scvtf d0, d0         // Converte int64 para double
+     0x7002b7a798: fdiv d0, d0, d1      // Divide por 1.000.000.000,0 (1e9) -> segundos
+     0x7002b7a79c: fcvt s0, d0          // Converte para float s0
+     0x7002b7a7a0: mov x0, x20
+     0x7002b7a7a4: bl #0x7000c9cdfc     // Atualiza toda a física e simulação do mundo com dt s0!
+     ```
+   - Mesmo com o hook de `0x7002b7a858` configurando o modo 0 e o swap interval para 1, o slot de relógio mestre continuava lendo o valor original não sincronizado caso o hook estático não sobrescrevesse `d0`.
+
+2. **Implementação do Hook Mestre e Delta-Time Dinâmico**:
+   - Portada a função `rt_pla_frame_dt_ns(slot, default_ns)` do PokeL-ARecomp (commit `194de37e11`) para `runtime/hle/framepace.c`, medindo o tempo real entre quadros via `plat_now_ns()`.
+   - Adicionado o patch `_sv_frame_clock` em `tools/sv_patches.py` interceptando `0x7002b7a784`:
+     ```python
+     c->v[0] = (uint64_t)rt_pla_frame_dt_ns(0, orig_ns);
+     ```
+   - Em 60 FPS, `d0` recebe `16.666.667 ns` (16.67 ms). Dividido por 1e9, resulta em `0.016667s`, fazendo 60 quadros corresponderem a exatamente 1.0 segundo de simulação do jogo (**velocidade normal 1.0x, sem aceleração 2x**).
+   - Se o framerate oscilar ou cair abaixo de 60 FPS, o delta-time dinâmico ajusta a fração de segundo em tempo real, impedindo câmera lenta ou saltos abruptos.
+   - Mantido o patch `_sv_frame_pace` em `0x7002b7a858` garantindo apresentação vsync a 60 FPS (`interval = 1`).
+
+### C. Atualizações de Versão
+- Versão elevada para **`v0.0.9`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

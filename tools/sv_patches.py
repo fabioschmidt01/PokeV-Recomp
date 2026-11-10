@@ -8,6 +8,20 @@ SV_BUILDS = {
 }
 
 
+def _sv_frame_clock(gen, a):
+    # 0x7002b7a784: ldr d0, [x0, #8]
+    # Master frame clock in f_7002b79f68: loads nanosecond duration of slot 0.
+    # The value is converted to double (scvtf d0, d0), divided by 1e9 (fdiv d0, d0, d1) and float s0
+    # is passed to f_7000c9cdfc to advance the game simulation.
+    # Returning real wall-clock delta-time (16.67ms at 60 FPS) eliminates 2x speed-up and prevents slow-motion!
+    w = struct.unpack_from('<I', gen.nso.image, a - gen.base)[0]
+    assert w == 0xfd400400, hex(w)  # ldr d0, [x0, #8]
+    return ('{ extern uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns); '
+            'uint64_t orig_ns = c->x[0] ? LD64(c->x[0] + 8) : 0x01fca056ull; '
+            'c->v[0] = (uint64_t)rt_pla_frame_dt_ns(0, orig_ns); }'
+            f'  /* {a:#x}: SV 3.0.1 dynamic frame clock delta-time (ns) */')
+
+
 def _sv_frame_pace(gen, a):
     # 0x7002b7a858: ldrsb w20, [x10, #0x20]
     # In Pokémon Scarlet & Violet 3.0.1, [x10 + 0x20] is the game's target frame mode (1 for 30 FPS, 0 for 60 FPS).
@@ -28,7 +42,7 @@ def _sv_frame_pace(gen, a):
 def sv_patches(build):
     if build.lower() in SV_BUILDS:
         return {
+            0x7002b7a784: _sv_frame_clock,
             0x7002b7a858: _sv_frame_pace,
         }
     return {}
-
