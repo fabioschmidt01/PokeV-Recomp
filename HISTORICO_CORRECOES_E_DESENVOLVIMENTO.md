@@ -187,12 +187,63 @@ Uma regra crucial do projeto:
 
 ---
 
-## 8. Versionamento dos Commits
+## 8. Crash #2: Exceção c0000005 accessing 0 em f_7002b7d830+14a (malloc durante init sdk)
 
-| Commit | Mensagem | Escopo |
+### A. Diagnóstico e Causa Raiz
+Ao tentar iniciar o jogo na versão `v0.0.2`, o Launcher travou com o log:
+```
+init sdk (DT_INIT 7008000030, 112 init_array entries)
+*** exception c0000005 accessing 0
+    host pc 7ffc9552eb9a (f_7002b7d830+14a)
+    host lr 7008da4ae0 (?)
+```
+
+**Análise de Engenharia Reversa:**
+1. A função de inicialização do executável guest `nn::init::Start` (`0x70082dc200`) segue estritamente esta ordem de execução:
+   - Passo 1: `rtld_init_sdk` (chama o `DT_INIT` do módulo `sdk` em `0x7008000030`).
+   - Passo 2: `_init_libc1`
+   - Passo 3: `nninitInitializeSdkModule`
+   - Passo 4: `nninitStartup` (endereço `0x7002b7da90` no módulo `main` - **é esta rotina que inicializa o ponteiro do heap do jogo em `0x7004759418`!**)
+   - Passo 5: `_init_libc2`
+   - Passo 6: `rtld_init_main`
+   - Passo 7: `nnMain`
+2. No passo 1, o construtor global do `sdk` executa uma chamada para `malloc(0x38)` através da entrada GOT `0x7008cd6bc0`.
+3. Como o `runtime/loader.c` resolvia símbolos não interceptados por HLE buscando nos outros módulos carregados, o símbolo `malloc` foi resolvido para a implementação interna do `main` (`f_7002b7d830`).
+4. Porém, dentro de `f_7002b7d830`, o código lê `[0x7004759418]`, que é a estrutura do alocador principal do jogo.
+5. Como `nninitStartup` ainda **não havia rodado**, `0x7004759418` continha `0x0000000000000000`.
+6. Ao tentar desreferenciar `[0x0] + offset`, ocorreu uma violação de acesso imediata `c0000005 accessing 0`.
+
+### B. Solução Implementada: Alocador HLE Antecipado em `runtime/hle/libc.c`
+Interceptamos todas as importações de alocação de memória C padrão (`malloc`, `calloc`, `realloc`, `free`, `memalign`, `aligned_alloc`, `posix_memalign`) via HLE.
+O `loader.c` da arquitetura do recompilador prioriza `hle_lookup_impl(name)` sobre os símbolos dos módulos convidados. Com isso:
+- O `sdk` e o `subsdk0` recebem memória segura, alinhada e zerada do pool reservado de 224 MB (`HLE_HEAP` em `0x7092000000ull`) via `hle_alloc()`.
+- O `main` não sofre tentativa de uso de memória antes da chamada de `nninitStartup`.
+
+---
+
+## 9. Sincronização Completa de Melhorias de Estabilidade (Arceus ➔ Violet)
+
+Foram portadas e sincronizadas as seguintes melhorias críticas originárias do PokeZ-ARecomp (Legends Arceus):
+
+| Componente | Arquivo Modificado | Melhoria Aplicada |
 |---|---|---|
-| `14ff341` | `feat(pokev): initial commit for PokeV-Recomp (Pokémon Scarlet & Violet)` | Criação do recompiler, zaimport com Title IDs de SV, CI/CD Windows e Linux. Tag `v0.0.1`. |
-| `cfbbeab` | `fix(kernel): initialize tpidr with thread local region to prevent TLS crash in malloc` | Correção definitiva do crash `c0000005 accessing 0x30`. Inicialização correta de `tpidr_el0` e expansão de pool de threads. |
+| **Build Cache & Trava** | `runtime/build_cache.cpp` | Geração automática do arquivo de estado persistente `recomp_state.ini` ao finalizar o build. |
+| **Bypass de Recompilação** | `runtime/gamelib.c` | Verificação de `state_matches(game_dir, want)`. Se `lasgame.dll.id` e `recomp_state.ini` coincidirem com a CPU, o launcher entra direto no menu com botão **JOGAR** ativo, sem reconstruir arquivos. |
+| **Tabela de Desvios (Setjmp)** | `runtime/dispatch.c` | Expansão de slots `NJMP` de 32 para 256, mecanismo de poda de pilha para frames mortos (`sp < c->sp`) e fallback por PC de retorno em `dispatch_slow`. |
+| **Shaders Atômicos 64-bit** | `runtime/nvn/maxwell/translate.c` | Suporte completo para `atom size 2` (64-bit atomics) no compilador Maxwell -> GLSL/Vulkan, manipulando metades baixa e alta (`old` e `old_hi`). |
+| **Threading para Xeon** | `runtime/nvn/vulkan/textures.c` | Calibração do pool de descompactação paralela de texturas para CPUs multi-core (até 10 threads para Xeon 24+ threads) com log informativo. |
+| **Identidade Visual & Janela** | `runtime/crash_explain.c`<br>`runtime/platform/windows.c` | Correção dos textos residuais do Arceus, padronizando os alertas e diálogos para **PokeV-Recomp**. |
+
+---
+
+## 10. Versionamento dos Commits
+
+| Commit | Tag | Mensagem | Escopo |
+|---|---|---|---|
+| `14ff341` | `v0.0.1` | `feat(pokev): initial commit for PokeV-Recomp (Pokémon Scarlet & Violet)` | Criação do recompiler, zaimport com Title IDs de SV, CI/CD Windows e Linux. |
+| `cfbbeab` | - | `fix(kernel): initialize tpidr with thread local region to prevent TLS crash in malloc` | Correção do crash `c0000005 accessing 0x30`. Inicialização correta de `tpidr_el0` e expansão do pool TLS para 4 MB. |
+| `fe0cd1a` | `v0.0.2` | `docs: add comprehensive development and bugfix history document` | Documentação inicial e release v0.0.2. |
+| `c612890` | `v0.0.3` | `fix(hle): add HLE malloc/free allocator and sync stability features from Arceus` | Correção do crash `c0000005 accessing 0` via alocador HLE em `libc.c` e sincronização total de melhorias de estabilidade do Arceus. |
 
 ---
 
