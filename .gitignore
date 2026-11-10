@@ -1,0 +1,48 @@
+# your own game files and what's made from them (building from source puts them here)
+input/
+extracted/
+test_extract/
+generated/
+generated-*/
+generated[0-9]*/
+/rando/
+# Nintendo fonts (users import their own; only the README ships)
+/fonts/*
+!/fonts/README.md
+# build output, caches, saves and settings
+build/
+/cache/
+save/
+/larecomp.ini
+/gamecontrollerdb.txt
+# tools and Python environments (machine-specific)
+tools/venv/
+venv/
+__pycache__/
+.DS_Store
+
+# texture dumps and HD packs (game art: users make their own)
+/textures/
+/mods/
+# Private battle UI resource generated from the player's game; never distribute.
+/assets/xbox_attack_layout/
+/tools/hdtools/
+# Claude Code: machine-specific notes
+CLAUDE.local.md
+# Intel XeSS SDK runtime binaries & samples (fetched automatically by tools/za/dist.sh)
+third_party/xess/bin/
+third_party/xess/samples/
+third_party/xess/doc/
+
+# screenshots taken in game (F10): game images, never committed
+/screenshots/
+
+# Nintendo game packages and encryption keys (never commit)
+*.nsp
+*.xci
+*.keys
+*.keys.txt
+ProdKeys/
+Jogo/
+romfs.bin
+

@@ -1,0 +1,172 @@
+name: Build PokeV-Recomp (Windows & Linux)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows x64 Build
+    runs-on: windows-2022
+    steps:
+      - name: Configure Git Line Endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSYS2 UCRT64 Toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          location: 'C:\msys64'
+          msystem: UCRT64
+          update: false
+          path-type: inherit
+          install: make nasm diffutils
+
+      - name: Install MSYS2 UCRT64 Packages
+        shell: msys2 {0}
+        run: |
+          sed -i 's/#DisableDownloadTimeout/DisableDownloadTimeout/g' /etc/pacman.conf || true
+          grep -q "DisableDownloadTimeout" /etc/pacman.conf || echo "DisableDownloadTimeout" >> /etc/pacman.conf
+          sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 5/g' /etc/pacman.conf || true
+          for i in 1 2 3 4 5; do
+            echo "Pacman install attempt $i..."
+            if pacman -S --needed --noconfirm --disable-download-timeout \
+              mingw-w64-ucrt-x86_64-clang \
+              mingw-w64-ucrt-x86_64-lld \
+              mingw-w64-ucrt-x86_64-gcc \
+              mingw-w64-ucrt-x86_64-binutils \
+              mingw-w64-ucrt-x86_64-sdl3 \
+              mingw-w64-ucrt-x86_64-vulkan-devel \
+              mingw-w64-ucrt-x86_64-shaderc \
+              mingw-w64-ucrt-x86_64-spirv-tools \
+              mingw-w64-ucrt-x86_64-pkgconf \
+              mingw-w64-ucrt-x86_64-vulkan-memory-allocator; then
+              echo "Pacman packages installed successfully!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          echo "All pacman install attempts failed!"
+          exit 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Windows Package
+        shell: bash
+        run: |
+          unset INCLUDE LIB LIBPATH
+          UCRT_DIR=""
+          for candidate in \
+            "/d/a/_temp/setup-msys2/msys64/ucrt64/bin" \
+            "/d/a/_temp/setup-msys2/ucrt64/bin" \
+            "/c/msys64/ucrt64/bin" \
+            "/c/hostedtoolcache/windows/msys64/ucrt64/bin"; do
+            if [ -x "$candidate/clang.exe" ]; then
+              UCRT_DIR="$candidate"
+              break
+            fi
+          done
+          if [ -z "$UCRT_DIR" ]; then
+            UCRT_CLANG=$(find /d/a/_temp /c -maxdepth 5 -name "clang.exe" 2>/dev/null | grep -i "ucrt64/bin/clang.exe" | head -n 1 || true)
+            [ -n "$UCRT_CLANG" ] && UCRT_DIR=$(dirname "$UCRT_CLANG")
+          fi
+          if [ -n "$UCRT_DIR" ]; then
+            CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v -i "Program Files/LLVM" | grep -v -i "Windows Kits" | tr '\n' ':')
+            export PATH="$UCRT_DIR:$(dirname "$UCRT_DIR")/usr/bin:$CLEAN_PATH"
+            echo "Using UCRT64 toolchain at: $UCRT_DIR"
+            echo "Clang binary: $(which clang)"
+            clang --version
+          fi
+          export ZIP=1
+          bash tools/za/dist.sh
+
+      - name: Rename Output Zip
+        shell: pwsh
+        run: |
+          if (Test-Path "build/dist-za/ZA-Recomp-windows.zip") {
+            Move-Item -Force "build/dist-za/ZA-Recomp-windows.zip" "build/dist-za/PokeV-Recomp-windows-x64.zip"
+          }
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeV-Recomp-windows-x64
+          path: build/dist-za/PokeV-Recomp-windows-x64.zip
+          if-no-files-found: error
+
+  # Linux build temporarily commented out for faster Windows iteration as requested
+  # linux:
+  #   name: Linux x86_64 AppImage
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 120
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v4
+  #     - name: Build Docker Container
+  #       run: docker build -t za-linux-build -f tools/linux/Containerfile tools/linux
+  #     - name: Compile AppImage
+  #       run: |
+  #         docker run --rm -v "$PWD:/src" -w /src za-linux-build bash -euo pipefail -c '
+  #           apt-get update
+  #           apt-get install -y --no-install-recommends dotnet-sdk-8.0 python3-venv
+  #           git config --global --add safe.directory /src
+  #           PYTHON=python3.12 tools/za/dist-linux.sh'
+  #     - name: Upload Linux Artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: PokeV-Recomp-linux-x86_64
+  #         path: build/dist/*.AppImage
+  #         if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PokeV-Recomp-windows-x64
+          path: dist-release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-release/*.zip
+          name: "PokeV-Recomp ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          body: |
+            ## PokeV-Recomp (Pokémon Violet & Scarlet Recomp) ${{ github.ref_name }}
+            
+            Native PC port of **Pokémon Violet & Scarlet** (3.0.1).
+            
+            ### Included in this release:
+            - **Windows x64**: `PokeV-Recomp-windows-x64.zip`
+            
+            ### Highlights:
+            - Dedicated Intel Arc B580 12GB VRAM pool unlocking and Battlemage Xe2 tuning.
+            - Intel Xeon high-core count multi-threading texture streaming.
+            - Intel XeSS SDK AI neural upscaling support.
+            - F10 TotK Recomp style hardware overlay HUD.
