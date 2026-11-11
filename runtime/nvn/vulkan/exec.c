@@ -7225,6 +7225,16 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
         (unsigned long long)st.program->stages[0].code_addr, (unsigned long long)st.program->stages[1].code_addr,
         pr->vi->cbuf_mask, pr->fi->cbuf_mask, st.rt.ncolor);
     for (int i = 0; i < st.rt.ncolor; i++) if (st.rt.color[i]) LOG(" %ux%u/f%#x", st.rt.color[i]->width, st.rt.color[i]->height, st.rt.color[i]->format);
+    // (investigation) each colour slot as bound: its index, the view's format when the game named one, the Vulkan
+    // format of the image and of the pass, the texture
+    LOG(" | slots");
+    for (int i = 0; i < st.rt.ncolor && i < 8; i++) {
+        if (!st.rt.color[i]) { LOG(" %d:none", i); continue; }
+        const TexBackend *cb_ = (const TexBackend *)st.rt.color[i]->backend;
+        LOG(" %d:f%#x", i, st.rt.color[i]->format);
+        if (st.rt.has_cview[i]) LOG("/view mask %#x f%#x", st.rt.cview[i].setmask, st.rt.cview[i].format);
+        LOG("/vk %d pass %d %p", cb_ ? (int)cb_->format : -1, (int)pass_color[i], (void *)st.rt.color[i]);
+    }
     if (st.rt.depth) LOG(" d%#x %p", st.rt.depth->format, (void *)st.rt.depth);
     LOG(" | vp %.0f %.0f %.0f %.0f | attrs %#x blend %#x ds %02x%02x%02x poly %02x%02x chmask %08x offset %x %g %g %g\n",
         st.viewport[0][0], st.viewport[0][1], st.viewport[0][2], st.viewport[0][3], pr->vi->attr_mask, st.color_state[0], st.ds[0],
@@ -7286,7 +7296,24 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
                     e->view.swizzle[2], e->view.swizzle[3], e->view.base_level, e->view.num_levels, slot_kind(e));
             else if (e) LOG(" | slot %d id %u no view (texture ds %u) kind %d", slot, tic, t->ds_mode, slot_kind(e));
         }
-        LOG("\n");
+        LOG(" vk %d\n", b ? (int)b->format : -1);
+        // (investigation: Scarlet / Violet's stripes) the inputs of the full-screen passes that write the scene's HDR
+        // colour - the deferred lighting and what follows it: each colour texture as its own bytes (alpha kept), the
+        // first 96 of a run. build/textures/in_<draw>_tex<i>.png
+        if (!indexed && r->x[2] == 3 && pr->fi->ntex >= 6 && st.rt.ncolor && st.rt.color[0] && st.rt.color[0]->format == 0x3F && b &&
+            pr->fi->tex[i].type == TEXTYPE_2D && b->samples == 1 &&  // (what the saver's 2D float sampler can read)
+            (t->format == 0x25 || t->format == 0x38 || t->format == 0x3F || t->format == 0x29 || t->format == 0x1)) {
+            static int nsave, ndraw = -1;
+            static const void *last_r;
+            if (last_r != (const void *)r) { last_r = r; ndraw++; }
+            if (nsave < 96) {
+                char path[80];
+                mkdir("build/textures", 0755);
+                snprintf(path, sizeof path, "build/textures/in_%02d_tex%d.png", ndraw, i);
+                nsave++;
+                renderer_save_texture_tex((TexBackend *)b, path);
+            }
+        }
         if (t->format == 0x1 && t->width >= 256 && t->addr) {  // (R8 atlases, e.g. a glyph cache: guest bytes vs the GPU copy)
             const uint8_t *g = (const uint8_t *)(uintptr_t)t->addr;
             uint64_t n = (uint64_t)t->width * t->height, nz = 0;

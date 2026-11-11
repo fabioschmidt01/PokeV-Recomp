@@ -634,4 +634,26 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 21. Listras: Stencil Corrigido, Causa Restante em Aberto - Build de Diagnóstico (v0.0.13)
+
+### A. Resultado da v0.0.12
+- O draw de iluminação passou a usar a variante correta (`build/glsl/74421cd200.frag`: `usampler2D t0` + `stc(...)`), ou
+  seja, as correções das seções 18 e 20 funcionaram: o stencil chega ao shader como inteiro.
+- **As listras continuam**, com o mesmo aspecto: o albedo do G-buffer segue limpo e o primeiro alvo HDR (saída da
+  iluminação) segue corrompido. Portanto a leitura de stencil não era a única (ou a principal) origem do ruído.
+- Hipóteses ainda não verificadas: normais empacotadas (12+12 bits em 3 bytes do alvo `0x25`) gravadas ou lidas com
+  formato diferente (por exemplo view sRGB), ou o alvo de material / profundidade.
+
+### B. Diagnóstico adicionado (somente no dump F9)
+- Linha `[draw]`: cada slot de cor como ligado (`slots 0:none 1:f0x38/view .../vk <formato Vulkan> pass <formato do passe>`).
+- Linhas `[draw]   texN`: formato Vulkan real da imagem amostrada.
+- `build/textures/in_<draw>_tex<i>.png`: bytes exatos (alfa preservado) de cada textura 2D de cor lida pelos passes de
+  tela cheia que escrevem no alvo HDR (iluminação e seguintes), até 96 arquivos por execução.
+- Nenhuma mudança de comportamento fora do dump; não recompila o `lasgame.dll`.
+
+### C. Atualizações de Versão
+- Versão elevada para **`v0.0.13`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
