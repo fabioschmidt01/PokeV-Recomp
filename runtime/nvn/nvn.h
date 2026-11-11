@@ -47,13 +47,23 @@ typedef struct {
 } NvnSamplerDesc;
 _Static_assert(8 + sizeof(NvnSamplerDesc) <= 64, "NvnSamplerDesc must fit an NVNsamplerBuilder");
 
+// Pokémon Scarlet / Violet: the guest's NVNtextureView is 16 bytes (its NVN is newer than Link's Awakening's). The game
+// keeps each view in a 24-byte heap object - the view, then two flag bytes of its own at +0x10 / +0x11 (main+0x1664f58:
+// 0x18 bytes allocated, SetDefaults, then a byte written at +0x11) - so the 28-byte layout this had wrote `target` over
+// the game's flags and `swizzle` past the allocation, and the view's depth/stencil mode never reached the texture pool:
+// the lighting pass read the scene depth where it asked for the stencil (bit 6: the pixels to skip), so it kept or
+// dropped pixels by the depth's low bits - stripes along each triangle's lines of equal depth, on everything lit.
+// Packed into 16 bytes (levels, target and mode fit a byte each; formats 16 bits).
 typedef struct {
-    uint32_t setmask;  // which fields are overridden
-    uint16_t base_level, num_levels, min_layer, num_layers;
-    uint32_t format, target, ds_mode;
+    uint8_t setmask;  // which fields are overridden
+    uint8_t ds_mode, target;
+    uint8_t base_level, num_levels;
+    uint8_t pad;
+    uint16_t min_layer, num_layers;
+    uint16_t format;
     uint8_t swizzle[4];
 } NvnTextureView;  // our layout inside the guest NVNtextureView
-_Static_assert(sizeof(NvnTextureView) <= 32, "NvnTextureView must fit the guest's");
+_Static_assert(sizeof(NvnTextureView) == 16, "NvnTextureView must fit the guest's (16 bytes in Scarlet / Violet)");
 
 // A view naming a texture (pool entry, render target, clear, copy): one in another format is told to the backend before
 // the texture is used through it.

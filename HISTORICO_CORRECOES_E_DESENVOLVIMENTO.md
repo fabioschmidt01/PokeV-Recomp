@@ -524,4 +524,47 @@ Nas capturas em execução real (cutscene da sala de aula, close-up da personage
 
 ---
 
+## 18. Listras / Ruído em Toda a Geometria 3D: `NVNtextureView` de 16 Bytes (v0.0.10)
+
+> **Estado: correção candidata, ainda não validada em jogo.** Esta seção também corrige o diagnóstico das seções 15 a 17:
+> as listras continuaram após a v0.0.9, portanto Alpha-to-Coverage, SIMD32 e GTAO não eram a causa.
+
+### A. Como a causa foi isolada
+1. **Ampliação dos screenshots**: as listras mudam de direção a cada triângulo (seguem linhas de mesma profundidade), o
+   que descarta um dither de tela (que teria o mesmo padrão fixo em toda a imagem).
+2. **Teste `LARECOMP_VK_EQUAL_TOL=1`**: sem efeito, descartando z-fighting entre o pré-passe de profundidade e o passe `EQUAL`.
+3. **Dump de frame (F9 + `LARECOMP_DUMP_GLSL=1`)**: o albedo do G-buffer sai limpo; a imagem só estraga no passe de
+   iluminação diferida (primeiro alvo `0x3f` 1920x1080).
+4. **Log do draw de iluminação**: `tex0` e `tex2` são a mesma textura `DEPTH24_STENCIL8` (`0x35`). O shader lê `tex0`,
+   extrai o bit 6 e descarta o pixel se estiver ligado (leitura de stencil), mas o GLSL traduzido declarava `sampler2D`
+   para os dois: o runtime entregava a profundidade onde o jogo pedia o stencil.
+5. **Binário do jogo (`main+0x1664f58`)**: o jogo aloca `0x18` bytes para o objeto da view, chama
+   `nvnTextureViewSetDefaults` e grava uma flag própria no offset `0x11`. Ou seja, `NVNtextureView` ocupa 16 bytes nesta
+   versão da NVN (o recomp de TotK documenta o mesmo: "NVNtextureView is 16 bytes").
+
+### B. Causa raiz
+O runtime (herdado do LAS Recomp / ZA Recomp) usava um layout próprio de 28 bytes dentro da `NVNtextureView` do jogo:
+- `target` (offset 16) sobrescrevia as flags do jogo em `0x10` / `0x11`;
+- `swizzle` (offset 24) era gravado além dos 24 bytes alocados (corrupção de heap);
+- o modo depth/stencil da view não chegava ao pool de texturas, então a view de stencil era amostrada como profundidade.
+
+O shader de iluminação decidia manter ou descartar cada pixel pelos bits baixos do float de profundidade, gerando as
+listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passam por esse passe e ficavam limpos.
+
+### C. Correção
+- `runtime/nvn/nvn.h`: `NvnTextureView` compactada em exatamente 16 bytes (`setmask`, `ds_mode`, `target`, níveis em 1 byte;
+  camadas e formato em 16 bits; `swizzle[4]`), com `_Static_assert(sizeof == 16)`.
+- `runtime/nvn/objects.c`: `nvnTextureViewSet*/Get*/Compare` acessam os campos por nome em vez de offsets fixos.
+- Mudança só de runtime: não altera o `GAMELIB_ID` (não força recompilar `lasgame.dll`).
+
+### D. Pendências
+- Validar em jogo (mesmo local dos screenshots). O shader de iluminação será recompilado numa variante com `usampler`.
+- Verificar se o brilho verde em montanhas/árvores some junto ou é um problema separado.
+- `shader_seen.txt` não grava os slots de stencil: a variante correta é traduzida no primeiro uso a cada execução.
+
+### E. Atualizações de Versão
+- Versão elevada para **`v0.0.10`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
