@@ -1,110 +1,148 @@
 <div align="center">
 
-<img src="docs/icon/icon_1024.png" alt="PokeV-Recomp Icon" width="140">
+<img src="docs/icon/icon_1024.png" alt="PokeV-Recomp icon" width="140">
 
 # PokeV-Recomp (SV Recomp)
 
-**A native PC port of *Pokémon Scarlet & Violet*, built by static recompilation.**
+**A native PC port of *Pokémon Violet*, built by static recompilation. Work in progress.**
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
-[Report an issue](https://github.com/fabioschmidt01/PokeV-Recomp-privado/issues) ·
-[Releases](https://github.com/fabioschmidt01/PokeV-Recomp-privado/releases)
+[Report an issue](../../issues) ·
+[Releases](../../releases)
 
 </div>
 
 ---
 
-**PokeV-Recomp** (SV Recomp) turns *Pokémon Violet & Scarlet* Nintendo Switch code into a native 64-bit Windows and Linux program.
-The game's ARM64 machine code is translated ahead-of-time (AOT) into C and compiled natively for x86-64. The Nintendo Switch OS kernel, filesystem, audio and Maxwell NVN graphics are reimplemented directly on top of Vulkan.
+**PokeV-Recomp** (SV Recomp) turns the Nintendo Switch code of *Pokémon Violet* into a native 64-bit program for
+Windows (and Linux, untested so far).
+The game's ARM64 machine code is translated ahead of time into C and compiled for x86-64 on your own PC. The Switch's
+operating system services, file system, audio and NVN graphics are re-implemented on top of Vulkan.
 
-**No emulator runs while you play.** The game executes natively on your CPU and GPU.
+**No emulator runs while you play.** The game's code executes natively on your CPU and GPU.
 
 > [!IMPORTANT]
-> **You need your own copy of the game.** PokeV-Recomp does not bundle any game code, ROMs, assets, textures or encryption keys. You must dump your legally purchased game (`.nsp` / `.xci` + update 3.0.1) and `prod.keys` from your own console.
+> **You need your own copy of the game.** PokeV-Recomp does not include any game code, ROM, asset, texture, font or
+> encryption key, and never will. You provide the files from the game you own; the recompilation happens locally on
+> your machine.
+
+---
+
+## Current status
+
+This is an early, in-development port. The game boots, loads a save and is playable in the open world, but it is not
+finished and has only been tested on one machine (Intel Arc B580, Xeon E5-2650 v4, Windows 10).
+
+**Known issues**
+
+- Small white specks along triangle edges on terrain and grass.
+- Character hair can render bright cyan.
+- The frame rate is unsteady in the open world (around 40 fps on the test machine, with drops), and there are hitches
+  the first time each shader is compiled.
+- Only *Pokémon Violet* 3.0.1 is recognised. *Pokémon Scarlet* is not supported yet.
+- **Linux is untested.** Releases include an AppImage built automatically from the same code, but nobody has run it on
+  real hardware yet. Reports are welcome ([docs/linux.md](docs/linux.md) lists what to include).
+
+Every fix and its validation state is logged in
+[HISTORICO_CORRECOES_E_DESENVOLVIMENTO.md](HISTORICO_CORRECOES_E_DESENVOLVIMENTO.md) (in Portuguese).
 
 ---
 
 ## Features
 
-### Performance & Engine
-- **Native 60 FPS** at regular game speed or 30 FPS console parity.
-- **Internal Resolution Scaling**: From 25% up to 4x native 1080p (4K UHD) with Dynamic Resolution scaling.
-- **High Core-Count Scaling (Intel Xeon & Multi-Core CPUs)**: Dynamic worker thread scaling (up to 8-10 parallel texture deswizzling threads on 16-24+ thread CPUs) eliminating open-world Paldea texture streaming stutter.
-- **Dedicated GPU Memory Unlocking (Intel Arc & High-VRAM GPUs)**: Full physical memory pool unlocked for GPUs with dedicated VRAM (such as the 12 GB Intel Arc B580 Battlemage), preventing memory thrashing.
+Most of these come from the runtime this project is built on (see [Credits](#credits--acknowledgements)). They are
+available in the F1 menu; not all of them have been validated with *Pokémon Violet* yet.
 
-### Graphics & Upscaling
-- **Intel XeSS (Xe Super Sampling)**: AI neural upscaling accelerated by hardware XMX engines on Intel Arc GPUs (with DP4a fallback).
-- **AMD FidelityFX FSR 1, FSR 2 (temporal)**, and **SMAA** anti-aliasing.
-- **Custom Shading & Lighting**: Screen-space ambient occlusion (XeGTAO), water reflections, screen-space GI, and high-resolution shadow mapping.
-- **HDR Display Output**: scRGB / HDR10 support.
-- **HD Texture Pack Loader**: Direct loading from `textures/hd/`.
+### Performance
+- **30 or 60 fps target** (option). See the known issues above for where it stands today.
+- **Internal resolution scale**, with optional dynamic resolution.
+- **Multi-threaded texture unpacking**, scaled to the number of CPU threads.
 
-### Controls & Input
-- Any modern gamepad via SDL3: Xbox, DualShock 4, DualSense, Nintendo Switch Pro Controller, Steam Deck.
-- Full Keyboard & Mouse support with smooth mouse-directed camera and customizable keybindings.
-- Dynamic controller button glyphs matching your active controller layout.
+### Graphics
+- **Upscalers**: bilinear, AMD FSR 1, Intel XeSS; AMD FSR 2 (temporal) and SMAA anti-aliasing.
+- **Lighting options**: ambient occlusion (XeGTAO), indirect light, water reflections, shadow resolution and sharpness.
+- **HDR output** (option).
+- **HD texture packs**: an *Original / HD* switch in the menu loads replacement textures from `textures/hd/`.
+- **Mods**: `mods/<name>/romfs` layers over the game's files.
+
+### Controls
+- Gamepads through SDL3 (Xbox, DualShock 4, DualSense, Switch Pro Controller, Steam Deck).
+- Keyboard and mouse, with a mouse-driven camera and rebindable keys.
 
 ---
 
-## Supported Version
+## Supported version
 
-| Game | Title ID | Target Version | `main` Build ID |
-|---|---|---|---|
-| **Pokémon Violet** | `01008F6008C5E000` | **3.0.1** (update v786432) | `709BFD6611529864` |
-| **Pokémon Scarlet** | `0100A3D008C5C000` | **3.0.1** (update v786432) | (Compatible) |
+| Game | Title ID | Version | `main` build ID | Status |
+|---|---|---|---|---|
+| **Pokémon Violet** | `01008F6008C5E000` | **3.0.1** (update v786432) | `709BFD6611529864` | Supported |
+| **Pokémon Scarlet** | `0100A3D008C5C000` | 3.0.1 | - | Not supported yet |
 
 ---
 
 ## Requirements
 
-| Component | Minimum | Recommended |
+| Component | Expected minimum (not tested) | Tested |
 |---|---|---|
-| **Operating System** | Windows 10/11 64-bit or Linux x86-64 (glibc 2.35+) | Windows 11 / Modern Linux |
-| **Processor** | x86-64 with AVX2 (4 Cores) | Intel Xeon E5 / Core i5/i7/i9 or AMD Ryzen (8+ Cores) |
-| **Graphics Card** | Vulkan 1.3 compatible GPU (4 GB VRAM) | **Intel Arc B580 (12 GB)** / RTX 3060+ / RX 6600+ |
-| **System Memory** | 8 GB RAM | 16 GB+ RAM |
-| **Storage** | ~15 GB free space | SSD / NVMe |
+| **Operating system** | Windows 10/11 64-bit, or Linux x86-64 with glibc 2.35+ | Windows 10 |
+| **Processor** | x86-64 with AVX2, 4 cores | Intel Xeon E5-2650 v4 (12 cores / 24 threads) |
+| **Graphics card** | Vulkan 1.3, 4 GB of video memory | Intel Arc B580 (12 GB) |
+| **Memory** | 8 GB | 16 GB |
+| **Storage** | ~15 GB free | SSD |
 
 ---
 
-## Quick Start (Playing)
+## Quick start
 
-1. Download the latest release from the [Releases](https://github.com/fabioschmidt01/PokeV-Recomp-privado/releases) tab (`PokeV-Recomp-windows-x64.zip` for Windows).
-2. Extract the archive into a writable folder (e.g. `C:\Games\PokeV-Recomp`).
-3. Prepare your game files:
-   - Base game (`.nsp` or `.xci`), the **3.0.1 update** (`.nsp`), and your `prod.keys` dumped from your console.
-4. Launch `lasrecomp.exe`.
-5. In the start screen, choose your game folder and click **Set up the game**.
-6. The initial static recompilation takes 10 to 25 minutes depending on your CPU core count (this occurs **only once**).
-7. Click **Play** and enjoy exploring Paldea!
+1. Download `PokeV-Recomp-windows-x64.zip` from the [Releases](../../releases) page (Linux:
+   `PokeV-Recomp-linux-x86_64.AppImage`, untested - make it executable and run it; the steps below are the same).
+2. Extract it into a folder you can write to (for example `C:\Games\PokeV-Recomp`).
+3. Have your own copy of the game ready, in one of these forms:
+   - the game extracted (`exefs` and `romfs` folders) at version **3.0.1** - no keys needed; or
+   - your dump: the base game (`.xci` or `.nsp`), the **3.0.1 update** (`.nsp`) and the `prod.keys` from your own
+     console.
+4. Run `PokeV-Recomp.exe`.
+5. On the start screen, choose the folder with your game files and click **Set up the game**.
+6. The first setup recompiles the game's code on your PC. It takes 10 to 30 minutes depending on the CPU and happens
+   once (again only when an update changes how the code is generated).
+7. Click **Play**.
 
 ---
 
 ## Controls
 
-| Keyboard | Action | Gamepad |
-|---|---|---|
-| W / A / S / D | Move player | Left Stick |
-| Mouse Movement | Camera control | Right Stick |
-| Left Click / Space | Action / Jump | A / B |
-| Right Click | Lock-on / Aim | ZL |
-| F1 / Esc | Settings Menu | + / − |
-| F10 | Save Screenshot (`screenshots/`) | - |
-| F11 | Fullscreen toggle | - |
+Keyboard movement is on **W / A / S / D** and the camera follows the mouse. Every key and button can be seen and
+changed in the F1 menu.
+
+| Key | Action |
+|---|---|
+| F1 | Settings menu |
+| F9 | Dump the next frame's render passes into `build/` (diagnostics) |
+| F10 | Performance overlay |
+| F11 | Toggle fullscreen |
+| F12 | Save a screenshot to `screenshots/` |
 
 ---
 
-## Credits & Acknowledgements
+## Credits & acknowledgements
 
-- **Peiikai**: Creator of [LAS Recomp](https://github.com/peiikai/LASRecomp), the static recompiler, runtime architecture, and Maxwell shader translator.
-- **Hexveil404**: Creator of [PokeZ-ARecomp](https://github.com/Hexveil404/PokeZ-ARecomp), introducing Switch OS HLE services and Pokémon decompilation paradigms.
-- **fabioschmidt01 & Antigravity**: Architecture, Intel Xeon multi-threading, Intel Arc B580 tuning, Intel XeSS integration, and Pokémon Violet & Arceus porting.
-- **Ryujinx Project**: Behavioral reference for Switch kernel and NVN GPU execution.
+- **Peiikai**: creator of [LAS Recomp](https://github.com/peiikai/LASRecomp) - the static recompiler, the runtime
+  architecture and the Maxwell shader translator this project is built on.
+- **Hexveil404**: creator of [PokeZ-ARecomp](https://github.com/Hexveil404/PokeZ-ARecomp), which brought the Switch OS
+  services and the Pokémon engine support.
+- **fabioschmidt01 & Antigravity**: architecture, Intel Xeon multi-threading, Intel Arc B580 tuning, Intel XeSS
+  integration, and the Pokémon Violet & Arceus ports.
+- **Ryujinx project**: behavioural reference for the Switch kernel and the NVN GPU.
 - **Open-source libraries**: SDL3, FFmpeg, Dear ImGui, Vulkan Memory Allocator, Shaderc, XeGTAO, LibHac, Intel XeSS SDK.
 
+PokeV-Recomp's own code is under the [MIT license](LICENSE); the components in `third_party/` keep their own licenses.
+
 ---
 
-## Legal Notice
+## Legal notice
 
-*PokeV-Recomp* is a fan-created research and preservation project. It is **not** endorsed, affiliated with, or sponsored by Nintendo, Game Freak, Creatures Inc., or The Pokémon Company. *Pokémon*, *Pokémon Scarlet*, and *Pokémon Violet* are registered trademarks of their respective owners. No proprietary Nintendo code, game binaries, textures, models, or font files are distributed in this repository.
+*PokeV-Recomp* is a fan-made research and preservation project. It is **not** endorsed by, affiliated with or sponsored
+by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company. *Pokémon*, *Pokémon Scarlet* and *Pokémon Violet* are
+trademarks of their respective owners. No Nintendo code, game binary, texture, model or font is distributed in this
+repository or in its releases.

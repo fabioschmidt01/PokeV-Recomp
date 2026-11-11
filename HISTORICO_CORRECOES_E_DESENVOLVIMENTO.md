@@ -685,12 +685,48 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 - Somente runtime; não recompila o `lasgame.dll`.
 
 ### D. Estado
-- **Ainda não validado em jogo** no momento deste registro. O brilho verde em montanhas/árvores pode ser consequência
-  do mesmo defeito ou um problema separado; verificar depois do teste.
+- **Validado em jogo em 11/11/2026**: as listras sumiram na v0.0.14 (Intel Arc B580). O brilho verde em
+  montanhas/árvores não aparece nas capturas noturnas do teste; não foi confirmado explicitamente de dia.
 - Os diagnósticos do dump F9 da v0.0.13 foram mantidos.
 
 ### E. Atualizações de Versão
 - Versão elevada para **`v0.0.14`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
+## 23. Preparação para Repositório Público, Nova Identidade Visual e Build de Linux (v0.0.15)
+
+### A. Problemas conhecidos após a v0.0.14 (ainda sem investigação)
+- Pontinhos / tracinhos brancos ao longo das bordas dos triângulos no chão e na grama.
+- Cabelo do personagem e de NPCs em ciano brilhante.
+- Taxa de quadros instável no mundo aberto (log da v0.0.14: média de 40 fps, 10% do tempo abaixo de 25, 209 quadros
+  lentos em ~12 min, 2236 compilações de shader na sessão).
+
+### B. Identidade visual própria de Pokémon Violet
+- **Ícone**: novo desenho original gerado por `tools/sv/make_icon.py` (céu violeta, aurora, lua, montanha com cratera,
+  luz ciano com anéis e hexágono, "PV" em dourado). Substitui o ícone anterior (tema de Legends Arceus) em
+  `docs/icon/icon_1024.png`, `icon.ico` e `icon.icns`; `docs/icon/icon.svg` (não usado) foi removido.
+- **Fundo da tela inicial**: `draw_art` em `runtime/ui/launcher.mm` deixa de desenhar a cidade noturna do Z-A e passa a
+  desenhar a mesma cena do ícone. Somente formas desenhadas por código; nenhuma arte do jogo. **Não compilado
+  localmente** - validado apenas por uma prévia em Python com as mesmas formas.
+
+### C. Repositório público
+- Removidas as capturas de tela herdadas (`docs/screenshots/`, `docs/ultrawide.jpg`: telas de Z-A e de Link's Awakening).
+  Continuam no histórico de commits anterior.
+- `README.md` / `README.pt-BR.md` reescritos: seção de estado atual e problemas conhecidos, executável correto
+  (`PokeV-Recomp.exe`), teclas conferidas no código (F12 captura, F10 painel de desempenho), Scarlet marcado como não
+  suportado (só o build do Violet 3.0.1 é reconhecido), aviso legal nas duas línguas, links relativos.
+- Repositório renomeado para `fabioschmidt01/PokeV-Recomp`; links da tela inicial atualizados.
+- **Verificação de atualização**: a tela inicial consultava as releases do ZA Recomp (`Hexveil404/PokeZ-ARecomp`) e
+  ofereceria versões de outro projeto como atualização; agora consulta as releases deste repositório.
+
+### D. Build de Linux reativado
+- `build-all.yml`: job `linux` (AppImage via `tools/za/dist-linux.sh`) de volta; a release publica
+  `PokeV-Recomp-linux-x86_64.AppImage` quando o job passa e sai só com o zip de Windows quando ele falha.
+- **Nunca testado em hardware real neste projeto.** Pendente: teste no Linux do mantenedor.
+
+### E. Atualizações de Versão
+- Versão elevada para **`v0.0.15`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
 
 ---
 

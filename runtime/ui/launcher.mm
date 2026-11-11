@@ -105,7 +105,7 @@ static const char *build_version(const uint8_t id[8]) {
 static bool build_is_za(const uint8_t id[8]) { return build_version(id) && memcmp(id, BUILD_ID, 8); }
 // The release tag this build is (also names the release files; Makefile / tools/bundle_macos.sh / make_dmg.sh read
 // it): ZA Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
-#define LARECOMP_VERSION "v0.0.14"
+#define LARECOMP_VERSION "v0.0.15"
 extern "C" const char *rt_version(void) { return LARECOMP_VERSION; }  // (runtime/main.c: the log's first line)
 extern "C" const char *larecomp_version(void) { return LARECOMP_VERSION; }  // (the shader caches' tag)
 
@@ -121,8 +121,10 @@ static void lang_update(void) { g_pt = settings_ui_portuguese(); }  // (runtime/
 // The start screen asks GitHub for the project's releases once per launch (a background curl, which macOS and
 // Windows 10+ ship) and offers the best one if it outranks this build: any v<x.y.z> above every beta, betas by
 // number; other tags are ignored. Offline / no curl / anything unexpected: nothing is shown.
-#define RELEASES_URL "https://api.github.com/repos/Hexveil404/PokeZ-ARecomp/releases?per_page=100"
-#define RELEASE_PAGE "https://github.com/Hexveil404/PokeZ-ARecomp/releases/tag/"
+// (PokeV-Recomp's own releases: until v0.0.15 this asked ZA Recomp's, so the start screen offered another project's
+// versions as updates)
+#define RELEASES_URL "https://api.github.com/repos/fabioschmidt01/PokeV-Recomp/releases?per_page=100"
+#define RELEASE_PAGE "https://github.com/fabioschmidt01/PokeV-Recomp/releases/tag/"
 
 static long long tag_rank(const std::string &t) {
     int n, a, b, c;
@@ -1596,18 +1598,27 @@ static bool toggle(const char *id, bool *v, float x, float y) {
     return pressed;
 }
 
-// ---- the background: a night city of our own (sky, aurora, crescent moon, a tower with golden rings, lit windows),
-// drawn to cover the window (a 1280 x 720 picture, cropped to the window's shape)
+// ---- the background: a night of our own for Pokémon Violet (a violet sky, an aurora, a crescent moon, a mountain with
+// a crater and a cyan light rising from it through rings and hexagons, a town's lights on the hills), drawn to cover the
+// window (a 1280 x 720 picture, cropped to the window's shape). No game artwork. tools/sv/make_icon.py draws the icon
+// from the same picture.
 static void draw_art(ImDrawList *dl, ImVec2 o, ImVec2 ds) {
     float k = fmaxf(ds.x / 1280, ds.y / 720);
     ImVec2 off(o.x + (ds.x - 1280 * k) / 2, o.y + (ds.y - 720 * k) / 2);
     auto A = [&](float x, float y) { return ImVec2(off.x + x * k, off.y + y * k); };
     auto band = [&](float y0, float y1, ImU32 a, ImU32 b) { dl->AddRectFilledMultiColor(A(0, y0), A(1280, y1), a, a, b, b); };
-    band(0, 360, IM_COL32(5, 11, 23, 255), IM_COL32(11, 36, 54, 255));
-    band(360, 590, IM_COL32(11, 36, 54, 255), IM_COL32(23, 68, 81, 255));
-    band(590, 720, IM_COL32(23, 68, 81, 255), IM_COL32(42, 90, 92, 255));
-    for (int i = 0; i < 18; i++)  // (a soft teal aurora up left: stacked translucent discs)
-        dl->AddCircleFilled(A(320, 150), (640 - i * 34) * k, IM_COL32(63, 208, 201, 3), 64);
+    auto poly = [&](const short (*p)[2], int n, ImU32 col) {  // (a silhouette: any shape, at most 24 points)
+        ImVec2 v[24];
+        for (int i = 0; i < n; i++) v[i] = A(p[i][0], p[i][1]);
+        dl->AddConcavePolyFilled(v, n, col);
+    };
+    band(0, 360, IM_COL32(9, 6, 24, 255), IM_COL32(26, 15, 58, 255));
+    band(360, 590, IM_COL32(26, 15, 58, 255), IM_COL32(52, 28, 96, 255));
+    band(590, 720, IM_COL32(52, 28, 96, 255), IM_COL32(78, 44, 120, 255));
+    for (int i = 0; i < 18; i++)  // (a soft violet aurora up left: stacked translucent discs)
+        dl->AddCircleFilled(A(320, 150), (640 - i * 34) * k, IM_COL32(124, 92, 255, 3), 64);
+    for (int i = 0; i < 12; i++)  // (its cyan edge)
+        dl->AddCircleFilled(A(150, 60), (420 - i * 30) * k, IM_COL32(64, 224, 232, 2), 64);
     static const float stars[][4] = {{64, 48, 1.2f, .8f}, {142, 110, .9f, .6f}, {230, 36, 1.4f, .9f}, {318, 88, .8f, .5f},
                                      {402, 22, 1.1f, .7f}, {470, 140, .9f, .5f}, {556, 64, 1.3f, .8f}, {640, 30, .8f, .6f},
                                      {712, 118, 1, .6f}, {790, 52, 1.4f, .9f}, {860, 96, .9f, .5f}, {934, 28, 1.1f, .7f},
@@ -1616,46 +1627,47 @@ static void draw_art(ImDrawList *dl, ImVec2 o, ImVec2 ds) {
     float tw = (float)ImGui::GetTime();
     for (int i = 0; i < 20; i++) {  // (a slow twinkle)
         float a = stars[i][3] * (0.75f + 0.25f * sinf(tw * 1.3f + i * 1.7f));
-        dl->AddCircleFilled(A(stars[i][0], stars[i][1]), stars[i][2] * k * 1.2f, IM_COL32(223, 234, 240, (int)(a * 255)));
+        dl->AddCircleFilled(A(stars[i][0], stars[i][1]), stars[i][2] * k * 1.2f, IM_COL32(232, 226, 250, (int)(a * 255)));
     }
     dl->AddCircleFilled(A(1060, 132), 38 * k, IM_COL32(244, 230, 191, 235), 48);  // crescent moon
-    dl->AddCircleFilled(A(1076, 120), 35 * k, IM_COL32(7, 19, 34, 255), 48);
-    dl->AddRectFilledMultiColor(A(874, 150), A(886, 670), IM_COL32(242, 181, 68, 0), IM_COL32(242, 181, 68, 0),
-                                IM_COL32(242, 181, 68, 60), IM_COL32(242, 181, 68, 60));  // the tower's light beam
-    static const short far_[][3] = {{0, 40, 452}, {40, 80, 420}, {80, 150, 462}, {150, 175, 404}, {175, 190, 382},
-                                    {190, 230, 404}, {230, 300, 470}, {300, 360, 432}, {360, 400, 410}, {400, 470, 482},
-                                    {470, 520, 396}, {520, 600, 440}, {600, 650, 416}, {650, 720, 470}, {720, 790, 432},
-                                    {790, 830, 406}, {830, 960, 462}, {960, 1000, 420}, {1000, 1070, 446},
-                                    {1070, 1110, 402}, {1110, 1180, 432}, {1180, 1240, 456}, {1240, 1280, 426}};
-    for (auto &b : far_) dl->AddRectFilled(A(b[0], b[2]), A(b[1], 720), IM_COL32(17, 48, 63, 255));
-    for (int i = 0; i < 16; i++)  // a warm glow over the city, low right
-        dl->AddCircleFilled(A(896, 640), (560 - i * 32) * k, IM_COL32(242, 181, 68, 5), 64);
-    ImVec2 tower[] = {A(866, 660), A(866, 340), A(872, 312), A(876, 236), A(880, 150), A(884, 236), A(888, 312),
-                      A(894, 340), A(894, 660)};
-    dl->AddConcavePolyFilled(tower, 9, IM_COL32(10, 31, 45, 255));
-    float ring_a = 0.75f + 0.25f * sinf(tw * 0.9f);
-    dl->AddEllipse(A(880, 300), ImVec2(30 * k, 6 * k), IM_COL32(242, 181, 68, (int)(215 * ring_a)), 0, 40, 2 * k);
-    dl->AddEllipse(A(880, 356), ImVec2(40 * k, 8 * k), IM_COL32(242, 181, 68, (int)(150 * ring_a)), 0, 40, 2 * k);
-    dl->AddEllipse(A(880, 420), ImVec2(50 * k, 10 * k), IM_COL32(242, 181, 68, (int)(100 * ring_a)), 0, 48, 2 * k);
-    dl->AddCircleFilled(A(880, 152), 4 * k, IM_COL32(255, 215, 122, 255));
-    static const short mid[][3] = {{0, 90, 520}, {95, 60, 470}, {160, 110, 545}, {275, 70, 500}, {340, 120, 560},
-                                   {465, 55, 455}, {525, 95, 530}, {625, 80, 495}, {710, 130, 560}, {935, 70, 480},
-                                   {1010, 110, 540}, {1125, 60, 465}, {1190, 90, 515}};
-    for (auto &b : mid) dl->AddRectFilled(A(b[0], b[2]), A(b[0] + b[1], 720), IM_COL32(10, 29, 43, 255));
-    static const short win[][3] = {{16, 540, 8}, {40, 540, 4}, {64, 560, 7}, {108, 490, 9}, {130, 510, 5}, {108, 530, 6},
-                                   {180, 565, 7}, {214, 565, 4}, {246, 585, 8}, {290, 520, 6}, {320, 540, 9},
-                                   {360, 580, 5}, {400, 580, 8}, {436, 600, 6}, {478, 475, 9}, {500, 500, 6},
-                                   {478, 525, 4}, {545, 550, 7}, {580, 570, 9}, {640, 515, 5}, {672, 535, 8},
-                                   {640, 555, 7}, {730, 580, 6}, {770, 580, 9}, {810, 600, 5}, {950, 500, 8},
-                                   {980, 520, 6}, {1030, 560, 9}, {1066, 580, 5}, {1096, 560, 7}, {1140, 485, 6},
-                                   {1164, 505, 9}, {1206, 535, 7}, {1244, 555, 5}};
+    dl->AddCircleFilled(A(1076, 120), 35 * k, IM_COL32(14, 9, 34, 255), 48);
+    static const short far_[][2] = {{0, 470}, {70, 440}, {150, 468}, {230, 420}, {300, 455}, {380, 430}, {470, 474},
+                                    {540, 446}, {610, 470}, {700, 452}, {1100, 460}, {1180, 440}, {1230, 418}, {1280, 446},
+                                    {1280, 720}, {0, 720}};
+    poly(far_, 16, IM_COL32(36, 22, 78, 255));  // the far range
+    for (int i = 0; i < 16; i++)  // a violet glow behind the mountain, low right
+        dl->AddCircleFilled(A(880, 560), (560 - i * 32) * k, IM_COL32(124, 92, 255, 5), 64);
+    dl->AddRectFilledMultiColor(A(872, 60), A(888, 440), IM_COL32(120, 226, 255, 0), IM_COL32(120, 226, 255, 0),
+                                IM_COL32(120, 226, 255, 80), IM_COL32(120, 226, 255, 80));  // the light rising from the crater
+    static const short massif[][2] = {{540, 720}, {560, 612}, {640, 560}, {700, 575}, {760, 500}, {800, 515}, {836, 440},
+                                      {852, 452}, {866, 428}, {880, 446}, {894, 428}, {910, 455}, {930, 445}, {975, 520},
+                                      {1010, 505}, {1070, 585}, {1120, 570}, {1210, 640}, {1280, 620}, {1280, 720}};
+    poly(massif, 20, IM_COL32(20, 11, 48, 255));  // the mountain, a crater at its top
+    static const short lit[][2] = {{866, 428}, {852, 452}, {836, 440}, {800, 515}, {824, 508}, {842, 470}, {856, 482},
+                                   {872, 438}};
+    poly(lit, 8, IM_COL32(46, 28, 98, 255));  // (its lit left face)
+    for (int i = 0; i < 16; i++)  // the glow at the crater's mouth
+        dl->AddCircleFilled(A(880, 440), (84 - i * 5) * k, IM_COL32(120, 226, 255, 5), 48);
+    float ring_a = 0.75f + 0.25f * sinf(tw * 0.9f);  // (the rings widen as they rise, inside a faint hexagon; a slow pulse)
+    dl->AddNgon(A(880, 300), 104 * k, IM_COL32(110, 230, 255, 34), 6, 1.5f * k);
+    dl->AddEllipse(A(880, 404), ImVec2(34 * k, 7 * k), IM_COL32(110, 230, 255, (int)(215 * ring_a)), 0, 40, 2 * k);
+    dl->AddEllipse(A(880, 352), ImVec2(48 * k, 10 * k), IM_COL32(110, 230, 255, (int)(150 * ring_a)), 0, 40, 2 * k);
+    dl->AddEllipse(A(880, 292), ImVec2(64 * k, 13 * k), IM_COL32(110, 230, 255, (int)(100 * ring_a)), 0, 48, 2 * k);
+    static const short hex[][4] = {{1012, 248, 22, 46}, {764, 214, 16, 38}, {1134, 330, 14, 34}, {690, 330, 10, 30}};
+    for (auto &x : hex) dl->AddNgon(A(x[0], x[1]), x[2] * k, IM_COL32(110, 230, 255, x[3]), 6, 1.5f * k);
+    dl->AddCircleFilled(A(880, 440), 4 * k, IM_COL32(214, 246, 255, 255));
+    static const short mid[][2] = {{0, 560}, {120, 530}, {260, 556}, {400, 522}, {540, 560}, {700, 604}, {860, 640},
+                                   {1280, 668}, {1280, 720}, {0, 720}};
+    poly(mid, 10, IM_COL32(22, 13, 52, 255));  // the hills in front, a town's lit windows on them
+    static const short win[][3] = {{96, 548, 8}, {116, 544, 5}, {134, 552, 7}, {236, 566, 6}, {258, 570, 9}, {282, 566, 5},
+                                   {372, 540, 7}, {394, 536, 9}, {416, 544, 6}, {438, 552, 8}, {508, 568, 5}, {530, 574, 8},
+                                   {596, 594, 6}, {640, 604, 7}};
     for (auto &w : win) dl->AddRectFilled(A(w[0], w[1]), A(w[0] + 5, w[1] + 7), IM_COL32(242, 199, 102, w[2] * 26));
-    static const short near_[][3] = {{0, 120, 640}, {120, 210, 615}, {210, 330, 650}, {330, 470, 625}, {470, 600, 660},
-                                     {600, 760, 630}, {760, 900, 655}, {900, 1050, 620}, {1050, 1160, 645},
-                                     {1160, 1280, 610}};
-    for (auto &b : near_) dl->AddRectFilled(A(b[0], b[2]), A(b[1], 720), IM_COL32(4, 13, 22, 255));
+    static const short near_[][2] = {{0, 640}, {160, 618}, {330, 646}, {520, 628}, {700, 655}, {900, 636}, {1080, 660},
+                                     {1280, 632}, {1280, 720}, {0, 720}};
+    poly(near_, 10, IM_COL32(9, 5, 24, 255));
     for (int i = 0; i < 11; i++)
-        dl->AddCircleFilled(A(60 + i * 120.0f, i & 1 ? 696 : 690), 2 * k, IM_COL32(242, 181, 68, i & 1 ? 150 : 180));
+        dl->AddCircleFilled(A(60 + i * 120.0f, i & 1 ? 696 : 690), 2 * k, IM_COL32(110, 230, 255, i & 1 ? 150 : 180));
 }
 
 // ---- first PLAY ever: the aspect ratio question, then how to open the in-game menu
@@ -3026,10 +3038,10 @@ extern "C" void launcher_run(const char *root) {
                                        "este projeto não tem ligação com eles.");
                 y += text(dl, F_BODY, 16, x, y, C_SOFT, about, w).y + 26;
                 if (button("##gh", TR("Project page (GitHub)", "Página do projeto (GitHub)"), x, y, 0, 48, BTN_SECONDARY))
-                    SDL_OpenURL("https://github.com/fabioschmidt01/PokeV-Recomp-privado");
+                    SDL_OpenURL("https://github.com/fabioschmidt01/PokeV-Recomp");
                 float bx2 = x + ImGui::GetItemRectSize().x / g_s + 12;
                 if (button("##issues", TR("Report a problem", "Relatar um problema"), bx2, y, 0, 48, BTN_SECONDARY))
-                    SDL_OpenURL("https://github.com/fabioschmidt01/PokeV-Recomp-privado/issues");
+                    SDL_OpenURL("https://github.com/fabioschmidt01/PokeV-Recomp/issues");
                 bx2 += ImGui::GetItemRectSize().x / g_s + 12;
                 if (button("##logs", TR("Open the logs folder", "Abrir a pasta de logs"), bx2, y, 0, 48, BTN_SECONDARY, true, IC_FOLDER))
                     reveal_folder("logs");

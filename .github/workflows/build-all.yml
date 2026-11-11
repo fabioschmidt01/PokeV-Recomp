@@ -113,34 +113,41 @@ jobs:
           path: build/dist-za/PokeV-Recomp-windows-x64.zip
           if-no-files-found: error
 
-  # Linux build temporarily commented out for faster Windows iteration as requested
-  # linux:
-  #   name: Linux x86_64 AppImage
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 120
-  #   steps:
-  #     - name: Checkout Code
-  #       uses: actions/checkout@v4
-  #     - name: Build Docker Container
-  #       run: docker build -t za-linux-build -f tools/linux/Containerfile tools/linux
-  #     - name: Compile AppImage
-  #       run: |
-  #         docker run --rm -v "$PWD:/src" -w /src za-linux-build bash -euo pipefail -c '
-  #           apt-get update
-  #           apt-get install -y --no-install-recommends dotnet-sdk-8.0 python3-venv
-  #           git config --global --add safe.directory /src
-  #           PYTHON=python3.12 tools/za/dist-linux.sh'
-  #     - name: Upload Linux Artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: PokeV-Recomp-linux-x86_64
-  #         path: build/dist/*.AppImage
-  #         if-no-files-found: error
+  # The Linux AppImage (tools/za/dist-linux.sh in tools/linux/Containerfile's Ubuntu 22.04 image, as
+  # linux-appimage.yml). Not tested on real hardware yet: the release below is published even when this job fails.
+  linux:
+    name: Linux x86_64 AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Build Docker Container
+        run: docker build -t za-linux-build -f tools/linux/Containerfile tools/linux
+      - name: Compile AppImage
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src za-linux-build bash -euo pipefail -c '
+            apt-get update
+            apt-get install -y --no-install-recommends dotnet-sdk-8.0 python3-venv
+            git config --global --add safe.directory /src
+            PYTHON=python3.12 tools/za/dist-linux.sh'
+      - name: Rename Output AppImage
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" build
+          f=$(ls build/dist/*.AppImage | head -n 1)
+          mv "$f" build/dist/PokeV-Recomp-linux-x86_64.AppImage
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeV-Recomp-linux-x86_64
+          path: build/dist/PokeV-Recomp-linux-x86_64.AppImage
+          if-no-files-found: error
 
   release:
     name: Publish GitHub Release
-    needs: [windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    # (the Windows build decides: a failed Linux job leaves the release with the Windows zip alone)
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.windows.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows Artifact
@@ -149,24 +156,32 @@ jobs:
           name: PokeV-Recomp-windows-x64
           path: dist-release
 
+      - name: Download Linux Artifact
+        if: ${{ needs.linux.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: PokeV-Recomp-linux-x86_64
+          path: dist-release
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist-release/*.zip
+            dist-release/*.AppImage
           name: "PokeV-Recomp ${{ github.ref_name }}"
           draft: false
           prerelease: false
           body: |
-            ## PokeV-Recomp (Pokémon Violet & Scarlet Recomp) ${{ github.ref_name }}
-            
-            Native PC port of **Pokémon Violet & Scarlet** (3.0.1).
-            
-            ### Included in this release:
+            ## PokeV-Recomp ${{ github.ref_name }}
+
+            Native PC port of **Pokémon Violet** (3.0.1) by static recompilation. Work in progress: see the README for
+            the current status and the known issues.
+
+            ### Files
             - **Windows x64**: `PokeV-Recomp-windows-x64.zip`
-            
-            ### Highlights:
-            - Dedicated Intel Arc B580 12GB VRAM pool unlocking and Battlemage Xe2 tuning.
-            - Intel Xeon high-core count multi-threading texture streaming.
-            - Intel XeSS SDK AI neural upscaling support.
-            - F10 TotK Recomp style hardware overlay HUD.
+            - **Linux x86-64**: `PokeV-Recomp-linux-x86_64.AppImage` (when present; not tested on real hardware yet)
+
+            No game code or game files are included: you need your own copy of the game.
+
+            What changed in each version: `HISTORICO_CORRECOES_E_DESENVOLVIMENTO.md` (in Portuguese).

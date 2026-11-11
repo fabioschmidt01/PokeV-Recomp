@@ -19,8 +19,6 @@ native Windows, macOS and Linux application.
 > - Linux aarch64 (ARM) - **experimental**: built but untested on real hardware; reports welcome
 >   ([docs/linux.md](docs/linux.md) lists what to include)
 
-![Mabe Village in a 21:9 window: the unlocked aspect ratio shows more of the island](docs/ultrawide.jpg)
-
 > [!NOTE]
 > **No game files are included.** LAS Recomp needs your own legally obtained copy of the extracted game files of
 > *Link's Awakening* **v1.0.0**, with no updates applied. When setting up, choose a folder that contains the `exefs`
