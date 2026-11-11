@@ -598,4 +598,40 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 20. Listras: Programa Preparado Usado em Draw que Lê Stencil (v0.0.12)
+
+> **Estado: correção candidata, ainda não validada em jogo.**
+
+### A. Resultado da v0.0.11
+- O crash `no function at 7002a1fc24` não se repetiu no teste do usuário (jogo recompilado com o novo `gen.py`).
+- O log de diagnóstico respondeu a pergunta pendente da seção 19:
+  ```
+  [nvn] texture view depth/stencil mode 1 (format 0x35)
+  [nvn] pool id 290: depth/stencil texture 1920x1080 fmt 0x35 (ds 0) with a view: mask 0x3f fmt 0x35 ds 1 target 1 swizzle 2,3,4,5
+  [draw]   tex0: ... f0x35 ... | slot 28 id 290 view mask 0x3f fmt 0x35 ds 1 ... kind 1
+  [draw]   tex2: ... f0x35 ... | slot 21 id 287 no view (texture ds 0) kind 0
+  ```
+  Ou seja: com o layout de 16 bytes (v0.0.10) a view de stencil chega ao pool e o draw de iluminação é chaveado
+  corretamente (`kind 1` no slot 28). Mesmo assim o GLSL em uso declarava `sampler2D t0`.
+
+### B. Causa
+- Os programas preparados antes do jogo (`shader_prep`, a partir de `cache/shader_seen.txt`) são traduzidos sem slots de
+  stencil / inteiros: os registros não guardam essa informação.
+- `prog_content_key()` (a chave com que `get_program_` procura um programa preparado) não incluía
+  `fkey->stencil_slots` nem `fkey->sint_slots`, embora a chave própria do `get_program_` inclua. Resultado: todo draw
+  desses shaders recebia o programa preparado, inclusive o de iluminação, que precisa de `usampler` no slot 28.
+
+### C. Correção
+- `runtime/nvn/vulkan/exec.c`: `prog_content_key()` passa a incluir `stencil_slots` e `sint_slots` do estágio de
+  fragmento. Draws com view de stencil / formato inteiro deixam de casar com o programa preparado e ganham uma tradução
+  própria (com `usampler` e aspecto `STENCIL`).
+- Mudança só de runtime: **não** recompila o `lasgame.dll`.
+- Limitação conhecida: como `shader_seen.txt` não grava esses slots, essas variantes são traduzidas no primeiro uso a
+  cada execução (uma pausa curta ao entrar no mundo 3D).
+
+### D. Atualizações de Versão
+- Versão elevada para **`v0.0.12`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

@@ -2332,6 +2332,12 @@ static uint64_t prog_content_key(uint64_t vh, uint64_t fh, const ShaderKey *vkey
     b = (const uint8_t *)vkey;
     for (size_t i = 0; i < sizeof *vkey; i++) { h ^= b[i]; h *= 0x100000001B3ull; }
     for (int i = 0; i < 8; i++) { h ^= fkey->rt_kind[i]; h *= 0x100000001B3ull; }
+    // the fragment textures bound as stencil / integer views, as in get_program_'s own key: a program prepared before
+    // the game is translated with none (the records don't carry them), and it was handed to every draw of its shaders -
+    // Scarlet / Violet's lighting reads the scene's stencil through slot 28 (a view in mode STENCIL) and got the
+    // prepared program's float sampler on it: the depth's bits where the stencil's were asked, stripes on everything lit
+    for (int k = 0; k < 4; k++) { h ^= (fkey->stencil_slots >> (k * 8)) & 0xFF; h *= 0x100000001B3ull; }
+    for (int k = 0; k < 4; k++) { h ^= (fkey->sint_slots >> (k * 8)) & 0xFF; h *= 0x100000001B3ull; }
     return h;
 }
 
