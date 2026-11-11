@@ -656,4 +656,42 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 22. Listras: Cópia de Feedback do Depth Entregava Profundidade a Quem Pedia Stencil (v0.0.14)
+
+### A. O que o dump da v0.0.13 mostrou
+- Entradas da iluminação decodificadas a partir de `build/textures/in_00_tex*.png`: **normais** (12+12 bits), **material**
+  e **albedo** estão limpos e contínuos. A hipótese das normais (seção 21) estava errada.
+- Saída da iluminação (`pass_042.png`): em cada superfície, 2 de cada 3 pixels saem zerados, numa grade diagonal regular
+  que muda de triângulo para triângulo; os pixels restantes variam muito de intensidade. É o padrão de um valor por
+  pixel que decide "pular" (bit 6 do stencil) ou escolher o modelo de shading (bits 0..2) vindo de dados errados.
+- O log mostra que o draw de iluminação tira um snapshot de feedback (`fbdepth_003`): a textura de depth/stencil da cena é
+  ao mesmo tempo o depth attachment do passe e é amostrada duas vezes (tex0 pela view STENCIL, tex2 como profundidade).
+
+### B. Causa
+- `resolve_feedback` (`runtime/nvn/vulkan/exec.c`) cria uma única view do snapshot, sempre do aspecto **DEPTH**, e
+  `texture_info` a usa para todo slot que aponta para a textura em feedback, ignorando o modo depth/stencil do slot.
+- Com as correções das seções 18 e 20 o shader declara `usampler2D` para o stencil, mas recebia a view de profundidade
+  (float): amostrador inteiro em formato float, indefinido em Vulkan. Na Arc B580 voltam bits do valor de profundidade,
+  que formam uma grade regular ao longo do plano de cada triângulo - as listras.
+- Antes da v0.0.10 esse caminho nunca era exercitado em Scarlet/Violet porque o modo STENCIL da view se perdia
+  (seção 18); por isso o defeito não aparecia no código herdado.
+
+### C. Correção
+- `texture_info`: slot em modo STENCIL sobre uma textura em feedback usa a view do aspecto **STENCIL** do snapshot
+  (a cópia já contém os dois aspectos).
+- `draw_writes_stencil()`: draws que escrevem stencil (teste ligado, máscara de escrita, operação diferente de KEEP)
+  agora invalidam o snapshot do depth, como a escrita de profundidade já fazia - senão o stencil lido poderia estar
+  desatualizado.
+- Somente runtime; não recompila o `lasgame.dll`.
+
+### D. Estado
+- **Ainda não validado em jogo** no momento deste registro. O brilho verde em montanhas/árvores pode ser consequência
+  do mesmo defeito ou um problema separado; verificar depois do teste.
+- Os diagnósticos do dump F9 da v0.0.13 foram mantidos.
+
+### E. Atualizações de Versão
+- Versão elevada para **`v0.0.14`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

@@ -2940,6 +2940,7 @@ static void set_vertex_input(VkCommandBuffer cb, const VtxLayout *l) {
 // ================================================================== feedback snapshots (renderer.m resolve_feedback)
 static NvnTexture *feedback_tex[4];
 static VkImageView feedback_view[4];
+static TexBackend *feedback_img[4];  // (the snapshot behind each view: a slot in stencil mode takes its own view of it)
 static int nfeedback;
 static uint64_t g_cur_fs_hash;
 static NvnTexture *snap_tex[8];
@@ -2966,6 +2967,19 @@ static bool is_attachment(NvnTexture *t) {
     if (!t) return false;
     if (t == st.rt.depth) return true;
     for (int i = 0; i < st.rt.ncolor; i++) if (t == st.rt.color[i]) return true;
+    return false;
+}
+
+// A draw that can change its depth/stencil target's stencil: the test on, a write mask, and an operation other than
+// KEEP on either face. The snapshots hold the stencil too (a slot in stencil mode reads it, texture_info), so such a
+// draw ends them as a depth write does.
+static bool draw_writes_stencil(void) {
+    if (!st.ds[3] || !((st.stencil_mask[0] | st.stencil_mask[1]) & 0xFF)) return false;
+    uint32_t ops = st.ds[5] | st.ds[6] << 8 | st.ds[7] << 16;  // (two faces x fail / depth fail / pass, a nibble each)
+    for (int k = 0; k < 6; k++) {
+        uint32_t o = (ops >> (k * 4)) & 0xF;
+        if (o >= 2 && o <= 8) return true;  // (stencil_op: anything else is KEEP)
+    }
     return false;
 }
 
@@ -3322,7 +3336,7 @@ static void resolve_feedback(Prog *pr) {
             if (nosnap < 0) nosnap = ENV("LARECOMP_NO_SNAPSHOT_REUSE") != NULL;
             int si = -1;
             for (int k = 0; k < 8; k++) if (snap_tex[k] == t) si = k;
-            bool self_write = t == st.rt.depth && st.ds[0] && st.ds[1];
+            bool self_write = t == st.rt.depth && ((st.ds[0] && st.ds[1]) || draw_writes_stencil());
             TexBackend *src = vk_tex(t, true);
             Snap *existing = NULL;
             for (int k = 0; k < nsnaps; k++) if (snaps[k].key == t && snaps[k].copy.image) existing = &snaps[k];
@@ -3330,6 +3344,7 @@ static void resolve_feedback(Prog *pr) {
             static const VkComponentMapping id = {0};
             if (!nosnap && si >= 0 && (snap_ok[si] || self_write) && existing) {
                 feedback_tex[nfeedback] = t;
+                feedback_img[nfeedback] = &existing->copy;
                 feedback_view[nfeedback++] = vk_image_view(&existing->copy, VK_IMAGE_VIEW_TYPE_2D, src->format, 0, 1, 0, 1, id, sa);
                 continue;
             }
@@ -3353,6 +3368,7 @@ static void resolve_feedback(Prog *pr) {
                 cb = vk_cmd();
             }
             feedback_tex[nfeedback] = t;
+            feedback_img[nfeedback] = dst;
             feedback_view[nfeedback++] = vk_image_view(dst, VK_IMAGE_VIEW_TYPE_2D, src->format, 0, 1, 0, 1, id, sa);
             if (si < 0) { static int rr; si = rr++ & 7; snap_tex[si] = t; }
             snap_ok[si] = true;
@@ -5624,6 +5640,20 @@ static void texture_info(int stage, ShaderInfo *si, int i, VkDescriptorImageInfo
             for (int k = 0; k < nfeedback; k++)
                 if (e->tex == feedback_tex[k] && (st_->type == TEXTYPE_2D || st_->type == TEXTYPE_2D_ARRAY)) {
                     view = feedback_view[k];
+                    // The snapshot's view above is its depth, whatever the slot asked for. A slot in NVN depth/stencil
+                    // mode STENCIL (the view's, else the texture's - as vk_view) reads the snapshot's stencil instead:
+                    // the copy holds both aspects. Scarlet / Violet's deferred lighting samples the scene's
+                    // depth/stencil twice while it is the pass's depth attachment - once as depth, once through a
+                    // STENCIL view for each pixel's shading model (bits 0..2) and its "skip" bit (6) - and its
+                    // usampler2D got the depth view: an integer sampler on a float format, undefined in Vulkan. The
+                    // Arc B580 returned bits of the depth value, which run in a regular lattice along each triangle's
+                    // plane - the stripes / per-triangle pixel noise on every lit surface (v0.0.14).
+                    TexBackend *fb = feedback_img[k];
+                    if (fb && (fb->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) && (fb->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+                        (e->has_view && (e->view.setmask & 16) ? e->view.ds_mode : e->tex->ds_mode) == 1) {
+                        static const VkComponentMapping id = {0};
+                        view = vk_image_view(fb, VK_IMAGE_VIEW_TYPE_2D, fb->format, 0, 1, 0, 1, id, VK_IMAGE_ASPECT_STENCIL_BIT);
+                    }
                     if (st_->type == TEXTYPE_2D_ARRAY) view = vk_dummy_view(TEXTYPE_2D_ARRAY);  // (2D snapshot as array: rare)
                 }
         } else if (e->dead_format) {
@@ -6710,7 +6740,7 @@ static void draw_(CmdRec *r, bool indexed) {
     alias_draw_check();
     resolve_feedback(pr);
     snap_reason = "draw-depthwrite";
-    if (st.rt.depth && st.ds[0] && st.ds[1]) snapshots_invalidate(st.rt.depth);
+    if (st.rt.depth && ((st.ds[0] && st.ds[1]) || draw_writes_stencil())) snapshots_invalidate(st.rt.depth);
     snap_reason = "draw-colorwrite";
     for (int i = 0; i < st.rt.ncolor; i++)
         if (st.rt.color[i] && ((st.channel_mask >> (i * 4)) & 0xF)) snapshots_invalidate(st.rt.color[i]);
