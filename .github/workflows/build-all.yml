@@ -130,6 +130,8 @@ jobs:
             apt-get update
             apt-get install -y --no-install-recommends dotnet-sdk-8.0 python3-venv
             git config --global --add safe.directory /src
+            # (the Makefile's shader steps call a bare "python", as the Windows build has it: the image only has python3)
+            ln -sf "$(command -v python3.12)" /usr/local/bin/python
             PYTHON=python3.12 tools/za/dist-linux.sh'
       - name: Rename Output AppImage
         run: |
