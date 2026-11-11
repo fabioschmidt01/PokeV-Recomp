@@ -567,4 +567,35 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 19. Crash "no function at 7002a1fc24" (Tabela de Saltos em Função Partida) e Diagnóstico das Views (v0.0.11)
+
+### A. Resultado da v0.0.10
+- As listras **continuaram**. O layout de 16 bytes da `NVNtextureView` (seção 18) é uma correção real (o runtime escrevia
+  além da alocação do jogo), mas não bastou: o draw de iluminação ainda usa a variante de shader sem `usampler` na
+  textura de stencil. O motivo ainda não foi determinado.
+- Apareceu um crash: `FATAL: no function at 7002a1fc24`.
+
+### B. Crash: causa e correção (`tools/gen.py`)
+- Em `0x7002a1f588` há um `switch` comum (`cmp w8, #0xa; b.hi; adrp/add; adr; ldrh; add; br x10`, 11 casos).
+- A função `0x7002a1f54c` é partida pelo gerador em vários pedaços (`f_7002a1f89c`, `f_7002a1f8ec`, ...). Quatro casos
+  da tabela caem fora do primeiro pedaço. O gerador rejeitava a tabela inteira quando um destino ficava fora de
+  `[entry, end)`, e o fallback só alcança instruções do próprio pedaço: o caso 2 (`0x7002a1fc24`) não tinha função.
+- Correção: destinos fora do pedaço, mas dentro do texto e a menos de 0x40000 do `br`, passam a ser aceitos; `scan()`
+  os registra como entradas (viram funções) e o `switch` emitido faz tail call para eles.
+- Validado localmente: gerador executado no `main` 3.0.1 (180.440 funções, 4.332 tabelas resolvidas), `f_7002a1fc24`
+  existe e o arquivo `main_914.c` compila com o `zig cc` distribuído.
+- **Efeito colateral esperado**: `gen.py` entra no `GAMELIB_ID`, então o jogo recompila o `lasgame.dll` na primeira
+  abertura desta versão.
+
+### C. Diagnóstico adicionado (listras)
+- Linhas `[draw]   texN` do dump F9 agora mostram a entrada do pool por trás de cada slot: view registrada (máscara,
+  formato, modo depth/stencil, target, swizzle, níveis) e o tipo de sampler com que o shader foi chaveado.
+- `[nvn] pool id ...`: primeiros registros de texturas depth/stencil no pool, com e sem view.
+- `[nvn] texture view depth/stencil mode ...`: primeiras chamadas de `nvnTextureViewSetDepthStencilMode` com modo != DEPTH.
+
+### D. Atualizações de Versão
+- Versão elevada para **`v0.0.11`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

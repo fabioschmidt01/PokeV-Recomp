@@ -215,7 +215,10 @@ class Module:
                     return None
                 t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
+                # (a case outside this function - its code was split off at an entry another function reaches -
+                # is still a case: scan() makes it an entry and the jump a tail call. Scarlet / Violet 0x7002a1f588:
+                # the table was dropped, its cases past the split had no function, "no function at 7002a1fc24")
+                if t % 4 or not (entry <= t < end or (self.in_text(t) and abs(t - br_pc) < 0x40000)):
                     return None
                 targets.append(t)
         except uc.UcError:
@@ -327,7 +330,10 @@ class Module:
                     return None
                 t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
+                # (a case outside this function - its code was split off at an entry another function reaches -
+                # is still a case: scan() makes it an entry and the jump a tail call. Scarlet / Violet 0x7002a1f588:
+                # the table was dropped, its cases past the split had no function, "no function at 7002a1fc24")
+                if t % 4 or not (entry <= t < end or (self.in_text(t) and abs(t - br_pc) < 0x40000)):
                     return None
                 targets.append(t)
         except uc.UcError:
@@ -375,7 +381,8 @@ class Module:
                 jt = self.jump_table(a, entry, end)
                 if jt:
                     tables[a] = jt
-                    labels.update(jt)
+                    labels.update(t for t in jt if entry <= t < end)
+                    ext.update(t for t in jt if not entry <= t < end)  # (cases in code split off this function)
                     self.stats['jumptables'] += 1
                 elif self.computed_target(a, entry):
                     # unresolved table jump: allow jumping to any instruction of the function
@@ -543,7 +550,8 @@ class Module:
                     out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
                     continue
                 if jt:
-                    cases = ' '.join(f'case {hx(t)}: goto L_{t:x};' for t in jt)
+                    cases = ' '.join(f'case {hx(t)}: goto L_{t:x};' if entry <= t < end else f'case {hx(t)}: {{ {jump(t)} }}'
+                                     for t in jt)
                     out.append(f'    switch ({ins.target}) {{ {cases} default: break; }}')
                     out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
                     continue

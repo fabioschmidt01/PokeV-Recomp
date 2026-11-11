@@ -7266,8 +7266,21 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
         NvnTexture *t = shader_texture_object(1, &pr->fi->tex[i]);
         const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
         if (!t) { LOG("[draw]   tex%d: none\n", i); continue; }
-        LOG("[draw]   tex%d: %p %ux%u f%#x lv %u -> %ux%u scale %.4f %.4f%s\n", i, (void *)t, t->width, t->height, t->format,
+        LOG("[draw]   tex%d: %p %ux%u f%#x lv %u -> %ux%u scale %.4f %.4f%s", i, (void *)t, t->width, t->height, t->format,
             b ? b->levels : 0, b ? b->width : 0, b ? b->height : 0, b ? b->sx : 0, b ? b->sy : 0, b && b->scalable ? " scalable" : "");
+        {   // the pool entry behind the slot: its view (what the game asked to see of the texture: a depth / stencil
+            // texture's stencil comes through a view in mode 1) and the sampler kind the shader was keyed with
+            int slot = ((int)pr->fi->tex[i].handle_offset - 0x20) / 8;
+            uint64_t h = (slot >= 0 && slot < 32) ? st.tex[1][slot] : 0;
+            uint32_t tic = h & 0xFFFFF;
+            const NvnTexEntry *e = h && st.tpool && tic < (uint32_t)st.tpool->count ? &((NvnTexEntry *)st.tpool->entries)[tic] : NULL;
+            if (e && e->has_view)
+                LOG(" | slot %d id %u view mask %#x fmt %#x ds %u target %u swz %u,%u,%u,%u levels %u+%u kind %d", slot, tic,
+                    e->view.setmask, e->view.format, e->view.ds_mode, e->view.target, e->view.swizzle[0], e->view.swizzle[1],
+                    e->view.swizzle[2], e->view.swizzle[3], e->view.base_level, e->view.num_levels, slot_kind(e));
+            else if (e) LOG(" | slot %d id %u no view (texture ds %u) kind %d", slot, tic, t->ds_mode, slot_kind(e));
+        }
+        LOG("\n");
         if (t->format == 0x1 && t->width >= 256 && t->addr) {  // (R8 atlases, e.g. a glyph cache: guest bytes vs the GPU copy)
             const uint8_t *g = (const uint8_t *)(uintptr_t)t->addr;
             uint64_t n = (uint64_t)t->width * t->height, nz = 0;

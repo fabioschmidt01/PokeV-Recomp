@@ -595,7 +595,12 @@ NVN(nvnTextureViewSetSwizzle) {
     v->setmask |= 8;
     v->swizzle[0] = (uint8_t)A(1); v->swizzle[1] = (uint8_t)A(2); v->swizzle[2] = (uint8_t)A(3); v->swizzle[3] = (uint8_t)A(4);
 }
-NVN(nvnTextureViewSetDepthStencilMode) { NvnTextureView *v = AP(0); v->setmask |= 16; v->ds_mode = (uint8_t)A(1); }
+NVN(nvnTextureViewSetDepthStencilMode) {
+    NvnTextureView *v = AP(0);
+    v->setmask |= 16; v->ds_mode = (uint8_t)A(1);
+    static int nlog;  // (investigation) the first views asked for in another mode than DEPTH
+    if (A(1) && nlog < 8) { nlog++; LOG("[nvn] texture view depth/stencil mode %llu (format %#x)\n", (unsigned long long)A(1), v->format); }
+}
 NVN(nvnTextureViewSetTarget) { NvnTextureView *v = AP(0); v->setmask |= 32; v->target = (uint8_t)A(1); }
 NVN(nvnTextureViewGetLevels) { NvnTextureView *v = AP(0); *(int32_t *)AP(1) = v->base_level; *(int32_t *)AP(2) = v->num_levels; RET(v->setmask & 1); }
 NVN(nvnTextureViewGetLayers) { NvnTextureView *v = AP(0); *(int32_t *)AP(1) = v->min_layer; *(int32_t *)AP(2) = v->num_layers; RET(!!(v->setmask & 2)); }
@@ -777,6 +782,28 @@ static void register_texture(Cpu *c) {
     PoolReg r = {.d = d, .id = id, .tex = HOST(NvnTexture, A(2)), .has_view = A(3) != 0};
     if (r.has_view) memcpy(&r.view, AP(3), sizeof r.view);
     if (r.has_view) nvn_texture_note_view(r.tex, &r.view);
+    {   // (investigation: Scarlet / Violet's lighting reads the scene's stencil) the first registrations of each kind
+        // of depth / stencil texture view, and of those without one
+        static int nlog;
+        static uint32_t seen[32];
+        if (r.tex && (r.tex->format == 0x31 || r.tex->format == 0x35 || r.tex->format == 0x36) && nlog < 32) {
+            uint32_t k = r.has_view ? 1u | (uint32_t)r.view.setmask << 1 | (uint32_t)r.view.ds_mode << 9 | (uint32_t)r.view.format << 12
+                                    : (uint32_t)r.tex->ds_mode << 1;
+            k ^= r.tex->format << 28 ^ r.tex->width << 4;
+            bool dup = false;
+            for (int i = 0; i < nlog; i++) dup |= seen[i] == k;
+            if (!dup) {
+                seen[nlog++] = k;
+                if (r.has_view)
+                    LOG("[nvn] pool id %d: depth/stencil texture %ux%u fmt %#x (ds %u) with a view: mask %#x fmt %#x ds %u target %u "
+                        "swizzle %u,%u,%u,%u\n", id, r.tex->width, r.tex->height, r.tex->format, r.tex->ds_mode, r.view.setmask,
+                        r.view.format, r.view.ds_mode, r.view.target, r.view.swizzle[0], r.view.swizzle[1], r.view.swizzle[2],
+                        r.view.swizzle[3]);
+                else LOG("[nvn] pool id %d: depth/stencil texture %ux%u fmt %#x (ds %u) without a view\n", id, r.tex->width,
+                         r.tex->height, r.tex->format, r.tex->ds_mode);
+            }
+        }
+    }
     static int immediate = -1;
     if (immediate < 0) immediate = ENV("LARECOMP_POOL_IMMEDIATE") != NULL;
     pthread_mutex_lock(&g_pool_lock);
