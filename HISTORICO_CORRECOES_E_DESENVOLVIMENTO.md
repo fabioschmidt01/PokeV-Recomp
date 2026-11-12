@@ -761,7 +761,7 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
-## 25. Tradução da PKG na Aba Mods, Backup Automático do Save, Rótulos do F1 (v0.0.17)
+## 25. Tradução da PKG na Aba Mods, Backup Automático do Save, Rótulos do F1 (v0.0.18)
 
 ### A. Tradução PT-BR (PKG Traduções)
 - A PKG Traduções autorizou o uso da tradução com os devidos créditos. Ela **não** vai dentro da release (os arquivos são
@@ -769,8 +769,7 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
   com o botão **Baixar** (abre a pasta de download no navegador; `LARECOMP_PTBR_URL` troca o link) e **Site da PKG**.
   O arquivo baixado é instalado arrastando para a janela ou pelo instalador de mods que já existia.
 - Com a tradução instalada, o cartão diz que ela está instalada e a linha do mod mostra "por PKG Traduções".
-- Pendente: a pasta do Google Drive pede login para quem não é o dono; precisa ser compartilhada como "qualquer pessoa
-  com o link" para funcionar para os outros jogadores.
+- A pasta do Google Drive foi compartilhada como "qualquer pessoa com o link" (conferido sem login: `PTBR.zip`).
 
 ### B. Backup automático do save (trazido do PokeL-ARecomp v0.26.1)
 - Após cada save confirmado, uma cópia em `save/backups/<arquivo>_<data>_<hora>.bak`; ficam as 10 mais novas por
@@ -787,7 +786,8 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 **Não compilado localmente.**
 
 ### E. Atualizações de Versão
-- Versão elevada para **`v0.0.17`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+- A tag `v0.0.17` não compilou (duas mensagens de log do backup com a quebra de linha dentro da string, erro do
+  script que gerou o código) e não tem release. Versão elevada para **`v0.0.18`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
 
 ---
 

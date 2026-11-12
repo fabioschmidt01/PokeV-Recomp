@@ -1109,13 +1109,11 @@ static void save_auto_backup(const char *path) {
     fclose(in);
     if (!ok) {
         if (out) unlink(dest);
-        LOG("[save-backup] could not write %s (%s)
-", dest, strerror(errno));
+        LOG("[save-backup] could not write %s (%s)\n", dest, strerror(errno));
         return;
     }
     last = now;
-    LOG("[save-backup] %s (%ld bytes)
-", dest, total);
+    LOG("[save-backup] %s (%ld bytes)\n", dest, total);
     // keep the 10 newest of this file (the names sort by time)
     DIR *d = opendir(dir);
     if (!d) return;
