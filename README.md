@@ -117,6 +117,9 @@ available in the F1 menu; not all of them have been validated with *Pokémon Vio
      console.
 4. Run `PokeV-Recomp.exe`.
 5. On the start screen, choose the folder with your game files and click **Set up the game**.
+   The game's version is checked first: only Pokémon Violet 3.0.1 is set up (Scarlet, other versions and other
+   games' files are refused, with the reason on screen). On Linux, the game files, saves and settings live in
+   `~/.local/share/pokev-recomp` (see [docs/linux.md](docs/linux.md)); `prod.keys` is also found in `~/.switch`.
 6. The first setup recompiles the game's code on your PC. It takes 10 to 30 minutes depending on the CPU and happens
    once (again only when an update changes how the code is generated).
 7. Click **Play**.

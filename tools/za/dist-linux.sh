@@ -1,6 +1,6 @@
 #!/bin/bash
-# ZA Recomp release for Linux x86-64, built natively (the Linux counterpart of tools/za/dist.sh):
-# build/dist/ZA Recomp-<version>-linux-x86_64.AppImage. No game code or game files: the start screen reads the player's
+# PokeV-Recomp release for Linux x86-64, built natively (the Linux counterpart of tools/za/dist.sh):
+# build/dist/PokeV-Recomp-<version>-linux-x86_64.AppImage. No game code or game files: the start screen reads the player's
 # own .xci / .nsp with their prod.keys (zaimport/) or an extracted exefs + romfs, and recompiles the game on their
 # machine (lasgen/ = tools/gen.py frozen by PyInstaller, zig/ = the compiler, gamelib-src/ = the headers it includes).
 # Built against this machine's glibc: the AppImage runs on distributions at least as new (Linux Mint 22 / Ubuntu 24.04
@@ -18,7 +18,7 @@ P=$L/deps
 B=$L/za
 APPDIR=$L/za-AppDir
 VERSION=$(sed -n 's/^#define LARECOMP_VERSION "\(.*\)"/\1/p' runtime/ui/launcher.mm)
-OUT="build/dist/ZA Recomp-$VERSION-linux-$ARCH.AppImage"
+OUT="build/dist/PokeV-Recomp-$VERSION-linux-$ARCH.AppImage"
 ZAIMPORT=${ZAIMPORT:-1}
 PY=${PYTHON:-python3}  # (the helpers' venvs; e.g. PYTHON=python3.12 in tools/linux/Containerfile's image)
 
@@ -87,17 +87,19 @@ cp README.md LICENSE "$D/"  # (licenses and source links of the bundled componen
 mkdir -p "$D/docs" && cp docs/XBOX-ATTACK-LAYOUT.md "$D/docs/"
 cp tools/za/za-default.ini "$D/za-default.ini"  # (not larecomp.ini: the data folder holds the player's own)
 cp tools/linux/AppRun "$APPDIR/" && chmod +x "$APPDIR/AppRun"
-cat > "$APPDIR/zarecomp.desktop" <<EOF
+# (PokeV-Recomp's own desktop id and icon name: until v0.0.24 they were ZA Recomp's, so desktop integration tools
+# merged the two apps' menu entries and icons)
+cat > "$APPDIR/pokev-recomp.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=ZA Recomp
-Comment=Pokémon Legends: Z-A, recompiled for PC (bring your own game files)
+Name=PokeV-Recomp
+Comment=Pokémon Violet, recompiled for PC (bring your own game files)
 Exec=lasrecomp
-Icon=zarecomp
+Icon=pokev-recomp
 Categories=Game;
 Terminal=false
 EOF
-cp docs/icon/icon_1024.png "$APPDIR/zarecomp.png" && ln -sf zarecomp.png "$APPDIR/.DirIcon"
+cp docs/icon/icon_1024.png "$APPDIR/pokev-recomp.png" && ln -sf pokev-recomp.png "$APPDIR/.DirIcon"
 
 # libraries: what lasrecomp needs (DT_NEEDED, recursively) that deps/ provides; anything else must be a system one
 # (glibc, libstdc++, the Vulkan loader: a bundled loader would not find the user's GPU drivers)

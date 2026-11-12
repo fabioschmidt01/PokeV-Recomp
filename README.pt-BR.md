@@ -120,7 +120,10 @@ disponíveis no menu F1; nem todos foram validados com o *Pokémon Violet* ainda
    - o seu dump: o jogo base (`.xci` ou `.nsp`), a **atualização 3.0.1** (`.nsp`) e o `prod.keys` do seu próprio
      console.
 4. Abra o `PokeV-Recomp.exe`.
-5. Na tela inicial, escolha a pasta com os arquivos do jogo e clique em **Configurar o jogo**.
+5. Na tela inicial, escolha a pasta com os arquivos do jogo e clique em **Preparar o jogo**.
+   A versão do jogo é conferida antes: só Pokémon Violet 3.0.1 é preparado (Scarlet, outras versões e arquivos de
+   outros jogos são recusados, com o motivo na tela). No Linux, os arquivos do jogo, saves e configurações ficam em
+   `~/.local/share/pokev-recomp` (veja [docs/linux.md](docs/linux.md)); o `prod.keys` também é encontrado em `~/.switch`.
 6. A primeira configuração recompila o código do jogo no seu PC. Leva de 10 a 30 minutos, conforme o processador, e
    acontece uma vez (de novo só quando uma atualização muda o modo como o código é gerado).
 7. Clique em **Jogar**.

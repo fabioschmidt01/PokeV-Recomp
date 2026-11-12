@@ -36,6 +36,7 @@
 extern "C" {
 #include "platform.h"
 #include "paths.h"
+#include "game_identity.h"
 #include "gamebuild.h"
 #include "gamelib.h"
 #include "romfs_build.h"
@@ -83,26 +84,13 @@ static void save_png(id<MTLTexture> tex, const char *path) {
 }
 #endif
 
-static const uint8_t BUILD_ID[8] = {0xae, 0x16, 0xf7, 0x1e, 0x00, 0x2a, 0xf8, 0xcb};  // Link's Awakening v1.0.0 main
-// Pokémon Legends Z-A's main builds (tools/patches.py ZA_BUILDS): set up from the player's .xci / .nsp and keys by the
-// bundled tools/zaimport (no extracted folder), no romfs/ copy - the game reads romfs.bin (+ aoc/ for the DLC)
-static const struct { uint8_t id[8]; const char *version; } ZA_BUILDS[] = {
-    {{0x72, 0x22, 0xe1, 0x3e, 0xcf, 0x6a, 0xdb, 0x32}, "1.0.0"},
-    {{0x8a, 0x1c, 0x86, 0xc4, 0x37, 0x39, 0x4b, 0x69}, "2.0.0"},
-    {{0xb1, 0xf1, 0x2f, 0xd9, 0x19, 0xea, 0xe8, 0x6a}, "2.0.2"},
-    // Pokémon Legends Arceus (tools/pla_patches.py PLA_BUILDS): set up the same way, zaimport reads its packages too
-    {{0xae, 0xe8, 0xf1, 0x50, 0xdd, 0xa1, 0xb5, 0xa8}, "1.1.1"},
-    // Pokémon Scarlet & Violet (tools/sv_patches.py SV_BUILDS): Violet 3.0.1 (v786432)
-    {{0x70, 0x9b, 0xfd, 0x66, 0x11, 0x52, 0x98, 0x64}, "3.0.1"},
-};
-// the version of a main module's build id: NULL = not one we know
-static const char *build_version(const uint8_t id[8]) {
-    if (!memcmp(id, BUILD_ID, 8)) return "1.0.0";
-    for (auto &b : ZA_BUILDS)
-        if (!memcmp(id, b.id, 8)) return b.version;
-    return NULL;
-}
-static bool build_is_za(const uint8_t id[8]) { return build_version(id) && memcmp(id, BUILD_ID, 8); }
+// The version of a main module's build id: NULL = not Pokémon Violet 3.0.1 (runtime/game_identity.h). Link's
+// Awakening, Z-A and Legends: Arceus builds used to pass here too, so another recomp's extracted/ in the data folder
+// counted as set up ("Compile now" on Arceus's files, issue #1): they are refused now, by name.
+static const char *build_version(const uint8_t id[8]) { return game_identity_supported(id); }
+// Set up from the player's .xci / .nsp and keys by the bundled tools/zaimport (romfs.bin + aoc/, no romfs/ copy), or
+// from an extracted exefs + romfs (a romfs/ folder): every supported build is a packaged one (no region_common/)
+static bool build_is_za(const uint8_t id[8]) { return build_version(id) != NULL; }
 // The release tag this build is (also names the release files; Makefile / tools/bundle_macos.sh / make_dmg.sh read
 // it): ZA Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
 #define LARECOMP_VERSION "v0.0.25"
@@ -487,6 +475,16 @@ static bool build_id_ok(const std::string &main_path) {
     return read_build_id(main_path, id) && build_version(id);
 }
 
+// A refused main module, for the failure panel: which game / version it is ("" when it can't be read)
+static std::string build_id_detail(const std::string &main_path) {
+    uint8_t id[8];
+    if (!read_build_id(main_path, id)) return "";
+    char what[128];
+    game_identity_describe(id, what, sizeof what);
+    fprintf(stderr, "[launcher] %s: %s, not Pok\xc3\xa9mon Violet 3.0.1 - refused\n", main_path.c_str(), what);
+    return std::string(TR("These files are ", "Esses arquivos são de ")) + what + ".";
+}
+
 // ------------------------------------------------------------------ Z-A: the player's packages -> game files
 // Game packages (.xci / .nsp) in the picked folder or a few levels below it
 // (compressed: .nsz / .xcz seen - NSZ's compressed packages, not readable here)
@@ -620,7 +618,7 @@ static bool import_packages(const std::vector<std::string> &pkgs, const std::str
     char tool[1100];
     if (!rt_resource("zaimport/zaimport" PLAT_EXE_SUFFIX, "build/zaimport/zaimport" PLAT_EXE_SUFFIX,
                      tool, sizeof tool)) {
-        err = "the game file importer is missing from this copy of ZA Recomp";
+        err = "the game file importer is missing from this copy of PokeV-Recomp";
         return false;
     }
     std::string log = g_root + "/import.log";
@@ -829,6 +827,12 @@ static bool build_game_code(void) {
     if (jobs < 1) jobs = 1;
     if (jobs > 10) jobs = 10;
     GameBuildOpts o = {build_progress, jobs, build_cancelled};
+    // (only Pokémon Violet 3.0.1's code is ever compiled: every path here checked it already - this is the last
+    // word, so no other game's files in the data folder can reach the generator, issue #1)
+    if (!build_id_ok(g_root + "/exefs/main")) {
+        set_failure(FAIL_VERSION, build_id_detail(g_root + "/exefs/main"));
+        return false;
+    }
     char why[256] = "";
     g_build_frac = 0;
     bool ok = gamebuild_run(g_root.c_str(), &o, why, sizeof why);
@@ -851,6 +855,19 @@ static void *extract_thread(void *) {
     std::string exefs, romfs;
     std::vector<std::string> pkgs;
     bool unusable = false;  // (game packages rather than its files)
+    {   // the data folder holds another recomp's game files (its folder used as PokeV-Recomp's: LARECOMP_DATA_ROOT,
+        // data_root.txt, or started from inside it): nothing is deleted, imported over or compiled there (issue #1)
+        char what[160];
+        if (rt_game_files_foreign(g_root.c_str(), what, sizeof what)) {
+            fprintf(stderr, "[launcher] %s holds %s's game files (another app's): not set up over them\n",
+                    g_root.c_str(), what);
+            set_failure(FAIL_VERSION, std::string(TR("The data folder holds ", "A pasta de dados tem os arquivos de ")) +
+                                          what + TR("'s files, from another app: they are left as they are. Start "
+                                                    "PokeV-Recomp with its own data folder.", ", de outro programa: eles "
+                                                    "ficam como estão. Abra o PokeV-Recomp com a pasta de dados dele."));
+            goto done;
+        }
+    }
     if (src.empty() && check_copied_files(g_root).empty()) {  // copied already (an update needs new game code)
         g_copy_skipped = true;
         if (!build_game_code()) goto done;
@@ -885,12 +902,15 @@ static void *extract_thread(void *) {
                             ? FAIL_UNUSABLE : FAIL_IMPORT, err);
             goto done;
         }
-        if (!build_id_ok(g_root + "/exefs/main")) { set_failure(FAIL_VERSION); goto done; }
+        if (!build_id_ok(g_root + "/exefs/main")) {
+            set_failure(FAIL_VERSION, build_id_detail(g_root + "/exefs/main"));
+            goto done;
+        }
         if (!build_game_code()) goto done;
         goto check;
     }
     if (exefs.empty() || romfs.empty()) { set_failure(unusable ? FAIL_UNUSABLE : FAIL_NOT_FOUND); goto done; }
-    if (!build_id_ok(exefs + "/main")) { set_failure(FAIL_VERSION); goto done; }
+    if (!build_id_ok(exefs + "/main")) { set_failure(FAIL_VERSION, build_id_detail(exefs + "/main")); goto done; }
     {
         // (the picked folder can't be LAS Recomp's own copy: setting up again deletes that first)
         char a[4096], b[4096];
@@ -1785,8 +1805,8 @@ static bool menu_tip(float s) {
         static const char *const pad[] = {"Minus + Plus", "View + Menu", "Create + Options"};
         int fam = bind_label_family() % 3;
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted(TR("ZA Recomp has its own menu for settings: F1 (or Minus+Plus on a controller).",
-                                  "O ZA Recomp tem um menu próprio de configurações: F1 (ou Menos+Mais no controle)."));
+        ImGui::TextUnformatted(TR("PokeV-Recomp has its own menu for settings: F1 (or Minus+Plus on a controller).",
+                                  "O PokeV-Recomp tem um menu próprio de configurações: F1 (ou Menos+Mais no controle)."));
         ImGui::Spacing();
         if (g_pt) ImGui::Text("Abra no jogo com F1 ou Esc, ou no controle com o %s (ou %s juntos).", home_pt[fam], pad[fam]);
         else ImGui::Text("Open it in game with F1 or Esc, or on a controller with the %s (or %s together).", home_en[fam], pad[fam]);
@@ -1899,8 +1919,8 @@ static void prelaunch_tab(float sc) {
         ImGui::PushFont(g_font_menu);
         ImGui::TextColored(ImVec4(1, 0.72f, 0.4f, 1), "%s", TR("Are you sure?", "Tem certeza?"));
         ImGui::PopFont();
-        ImGui::Text(TR("This deletes ZA Recomp's copy of the game files (%.1f GB).",
-                       "Isso apaga a cópia dos arquivos do jogo do ZA Recomp (%.1f GB)."), gb);
+        ImGui::Text(TR("This deletes PokeV-Recomp's copy of the game files (%.1f GB).",
+                       "Isso apaga a cópia dos arquivos do jogo do PokeV-Recomp (%.1f GB)."), gb);
         ImGui::TextDisabled("%s", TR("Saves, mods and settings are kept. Your own game files aren't touched.",
                                      "Saves, mods e configurações ficam. Os seus próprios arquivos do jogo não são tocados."));
         if (rt_dev_mode()) {  // (a source checkout: the files are the project's own extracted/)
@@ -1911,7 +1931,7 @@ static void prelaunch_tab(float sc) {
         ImGui::Spacing();
         if (ImGui::Button(TR("Delete", "Apagar"), ImVec2(220 * sc, 0))) {
             bool ok = rt_remove_game_files(g_root.c_str());  // (runtime/paths.c: only what the extraction made)
-            set_job(ok ? "Game files deleted." : "Could not delete the game files (not in ZA Recomp's data folder?).", !ok);
+            set_job(ok ? "Game files deleted." : "Could not delete the game files (not in PokeV-Recomp's data folder?).", !ok);
             g_files_deleted = true, gb = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -2371,6 +2391,30 @@ extern "C" void launcher_run(const char *root) {
         extract_thread(NULL);
         fprintf(stderr, "[launcher] setup: %s -> %s\n%s\n", g_job.c_str(),
                 check_game_files(g_root).empty() ? "READY" : "NOT READY", g_job_hint.c_str());
+        exit(0);
+    }
+    if (const char *t = getenv("LARECOMP_LAUNCHER_PROBE")) {  // (test) <folder>: what setup would find there, logged
+        // (read only: no import, no copy, no compile, nothing written - the checks extract_thread starts with, for a
+        // player's folder and keys before anything is set up)
+        std::string src = t, exefs, romfs, bad;
+        std::vector<std::string> pkgs;
+        bool unusable = false;
+        int compressed = 0;
+        find_game(src, 0, exefs, romfs, unusable);
+        find_packages(src, 0, pkgs, compressed);
+        for (auto &p : pkgs) fprintf(stderr, "[launcher] probe: package %s\n", p.c_str());
+        std::string keys = pkgs.empty() ? "" : find_keys(src, &bad);
+        std::string title_keys = keys.empty() ? "" : find_title_keys(src, keys);
+        fprintf(stderr, "[launcher] probe: %zu package(s), %d compressed, prod.keys %s, title.keys %s\n", pkgs.size(),
+                compressed, keys.empty() ? (bad.empty() ? "-" : ("not a prod.keys: " + bad).c_str()) : keys.c_str(),
+                title_keys.empty() ? "-" : title_keys.c_str());
+        if (!exefs.empty()) {
+            uint8_t id[8];
+            char what[128] = "unreadable";
+            if (read_build_id(exefs + "/main", id)) game_identity_describe(id, what, sizeof what);
+            fprintf(stderr, "[launcher] probe: extracted exefs %s (%s, %s), romfs %s\n", exefs.c_str(), what,
+                    build_id_ok(exefs + "/main") ? "supported" : "refused", romfs.empty() ? "-" : romfs.c_str());
+        }
         exit(0);
     }
     if (const char *t = getenv("LARECOMP_LAUNCHER_SETUP")) {  // (test) <folder>: setup started on the start screen
@@ -2953,7 +2997,7 @@ extern "C" void launcher_run(const char *root) {
                 static const SDL_DialogFileFilter zip_f[] = {{"Zip", "zip"}};
                 if (button("##export", TR("Export (.zip)", "Exportar (.zip)"), bx, ly, 0, 46, BTN_SECONDARY, g_save_time != 0,
                            IC_DOWN_ARROW))
-                    SDL_ShowSaveFileDialog(picked_export, NULL, win, zip_f, 1, "ZA Recomp save.zip");
+                    SDL_ShowSaveFileDialog(picked_export, NULL, win, zip_f, 1, "PokeV-Recomp save.zip");
                 bx += ImGui::GetItemRectSize().x / g_s + 10;
                 if (button("##opensave", TR("Open folder", "Abrir pasta"), bx, ly, 0, 46, BTN_SECONDARY, true, IC_FOLDER)) {
                     mkdir("save", 0755);
@@ -3025,7 +3069,7 @@ extern "C" void launcher_run(const char *root) {
                     ImGui::Dummy(ImVec2(1, 0));
                 }
                 ImGui::EndChild();
-                bar = {C_TEAL, TR("Saves live in the save folder next to ZA Recomp", "Os saves ficam na pasta save, ao lado do ZA Recomp")};
+                bar = {C_TEAL, TR("Saves live in the save folder next to PokeV-Recomp", "Os saves ficam na pasta save, ao lado do PokeV-Recomp")};
                 if (back_key) g_tab = TAB_PLAY, g_focus_play = true;
             }
 
@@ -3192,12 +3236,12 @@ extern "C" void launcher_run(const char *root) {
                                                                                  tag_label(upd, false) + "?").c_str());
                             ImGui::PopFont();
                             if (upd_size > 0)
-                                ImGui::Text(TR("ZA Recomp downloads it (%.0f MB) from GitHub, replaces its program files and opens again.",
-                                               "O ZA Recomp baixa a versão nova (%.0f MB) do GitHub, troca os arquivos do programa e abre de novo."),
+                                ImGui::Text(TR("PokeV-Recomp downloads it (%.0f MB) from GitHub, replaces its program files and opens again.",
+                                               "O PokeV-Recomp baixa a versão nova (%.0f MB) do GitHub, troca os arquivos do programa e abre de novo."),
                                             upd_size / 1e6);
                             else
-                                ImGui::Text("%s", TR("ZA Recomp downloads it from GitHub, replaces its program files and opens again.",
-                                                     "O ZA Recomp baixa a versão nova do GitHub, troca os arquivos do programa e abre de novo."));
+                                ImGui::Text("%s", TR("PokeV-Recomp downloads it from GitHub, replaces its program files and opens again.",
+                                                     "O PokeV-Recomp baixa a versão nova do GitHub, troca os arquivos do programa e abre de novo."));
                             ImGui::TextDisabled("%s", TR("Saves, mods, settings and the compiled game are kept as they are.",
                                                          "Saves, mods, configurações e o jogo já compilado ficam como estão."));
                             ImGui::Spacing();

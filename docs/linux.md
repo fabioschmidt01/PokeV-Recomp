@@ -6,19 +6,25 @@ the game itself untested on real hardware - community reports decide (see the en
 package the release AppImages.
 
 ## Running the AppImage
-    chmod +x LAS.Recomp-<version>-linux-x86_64.AppImage
-    ./LAS.Recomp-<version>-linux-x86_64.AppImage
+    chmod +x PokeV-Recomp-linux-x86_64.AppImage
+    ./PokeV-Recomp-linux-x86_64.AppImage
 
 Needs: a distribution with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36, Arch, ...), a Vulkan 1.3 driver
 (Mesa RADV / ANV / NVK / Turnip / Asahi Honeykrisp, or NVIDIA's), and on x86-64 a CPU with AVX2 (2013 or newer).
 On Linux 6.7 or newer the renderer also gets page write tracking (userfaultfd + PAGEMAP_SCAN, as Windows' write watch):
 its vertex cache, and textures re-checked only where the game wrote. Older kernels run without it (the log says
 `[plat] no page write tracking: ...`); `LARECOMP_WRITE_TRACKING=0` turns it off.
-The start screen asks for the folder with your own game files and sets them up.
+The start screen asks for the folder with your own game files and sets them up. PokeV-Recomp: choose the folder
+with your Pokémon Violet dump (base `.nsp` / `.xci`, the 3.0.1 update `.nsp`, optionally the DLC) or an extracted
+`exefs` + `romfs`; `prod.keys` / `title.keys` are found in that folder (a few levels down too), next to it, or in
+`~/.switch`. **Set up the game** reads them (your files are only read), checks the game is Pokémon Violet 3.0.1
+(`exefs/main` build ID `709BFD6611529864`: `runtime/game_identity.h`) and only then compiles the game code. Other
+versions, Scarlet, and other recomps' game files (Legends: Arceus, Z-A, Link's Awakening) are refused by name, and
+game files of another app are never deleted or written over, even when its folder ends up as the data folder.
 
-Everything the app writes lives in `~/.local/share/lasrecomp` (`$XDG_DATA_HOME/lasrecomp`): game files (`extracted/`),
+Everything the app writes lives in `~/.local/share/pokev-recomp` (`$XDG_DATA_HOME/pokev-recomp`): game files (`extracted/`),
 saves, seeds, settings (`larecomp.ini`), shader caches, imported fonts. Started without a terminal the log is
-`~/.local/share/lasrecomp/lasrecomp.log`, always the latest run; up to five recent runs are kept as
+`~/.local/share/pokev-recomp/lasrecomp.log`, always the latest run; up to five recent runs are kept as
 `lasrecomp-backup-*.log` (from a terminal it prints there instead). `LARECOMP_DATA_ROOT=<dir>` uses
 another folder.
 
@@ -116,7 +122,7 @@ The aarch64 AppImage is experimental: built on x86-64, only its start screen has
    `deviceName`, `driverName` and `driverInfo`.
 3. **What happened**: start screen? extraction? in game? where it stopped, any visual problems (screenshots help).
    With a controller: its model, and whether it works (the log names it: `[input] gamepad: ...`).
-4. **The log**: `~/.local/share/lasrecomp/lasrecomp.log` (or the terminal output when started from a terminal).
+4. **The log**: `~/.local/share/pokev-recomp/lasrecomp.log` (or the terminal output when started from a terminal).
    A crash writes `*** signal ...` and a backtrace there; attach the whole file (or if the problem was in
    an earlier run, that run's `lasrecomp-backup-*.log`, by date modified).
 5. **A crash backtrace with gdb** when the log's isn't enough:
@@ -160,8 +166,10 @@ write tracking, the pinned dependency build (`tools/linux/build_deps.sh`), and t
 was added for Pokémon Z-A on Linux:
 
 - FSR 2 compiles outside Windows (`FFX_GCC`, `size_t`, `wcscpy_s`); a dev build linked against `DEPS` gets an rpath.
-- Its own data folder, `~/.local/share/zarecomp` (`$XDG_DATA_HOME/zarecomp`), not LAS Recomp's `lasrecomp/` (both
-  installed would share saves, game files and `larecomp.ini`).
+- Its own data folder: for PokeV-Recomp `~/.local/share/pokev-recomp` (`$XDG_DATA_HOME/pokev-recomp`), not LAS
+  Recomp's `lasrecomp/`, ZA Recomp's `zarecomp/` or PokeL-ARecomp's `plarecomp/` (installed together they would share
+  saves, game files and `larecomp.ini`). v0.0.24 and earlier used `plarecomp/` by mistake (issue #1): nothing is moved
+  out of it - set the game up again from your own Pokémon Violet files, and copy `save/` over yourself if you had one.
 - A first run copies the release's settings (`za-default.ini`, shipped next to the app) into the data folder as
   `larecomp.ini`, as the Windows zip does with the `larecomp.ini` next to the exe.
 - `ooz` (the zaprompts helper's decompressor) builds as `libooz.so` through stand-in Windows headers
