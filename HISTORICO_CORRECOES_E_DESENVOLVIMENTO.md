@@ -913,4 +913,14 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 31. Validação em Jogo: Pontinhos Brancos e Lentidão Resolvidos (v0.0.23 + v0.0.24)
+
+- Confirmado pelo usuário (Intel Arc B580), com a v0.0.24 instalada e o código do jogo recompilado:
+  - **Pontinhos brancos nas bordas dos triângulos: sumiram** (deslocamento do textureGather, seção 30).
+  - **Câmera lenta abaixo de 60 fps: resolvida.** A 40, 45 e 50 fps o jogo anda na velocidade normal (todos os
+    slots de relógio pelo tempo real, seção 29).
+- As notas "Não validado em jogo" das seções 29 e 30 ficam superadas por esta.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
