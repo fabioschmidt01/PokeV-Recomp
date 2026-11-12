@@ -828,4 +828,25 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 27. Lentidão Abaixo de 60 fps: Volta Automática para 30 fps (v0.0.21)
+
+### A. Confirmação
+- Com a taxa de quadros em 30 fps no F1, o jogo **rodou liso** (usuário, 12/11/2026). A hipótese da seção 26.D se
+  confirma: no modo 60 fps forçado, abaixo de 60 o relógio mestre recebe o tempo real, mas animações e outras partes
+  continuam avançando 1/60 s por quadro - câmera lenta.
+
+### B. Correção
+- `rt_pla_is_60fps` (`runtime/hle/framepace.c`), usado pelos patches de Arceus e de Scarlet/Violet, passa a usar a mesma
+  volta automática do Z-A (`fps60_holds`): abaixo de 50 fps por 5 s seguidos (depois de 5 s de aquecimento, sem contar
+  segundos de compilação de shader), volta para o modo 30 fps do próprio jogo pelo resto da sessão e avisa na tela.
+  Escolher 60 de novo no F1 tenta outra vez. "60 fps (sempre)" (`fps60_lock`) e `LARECOMP_FPS` continuam valendo.
+- Ao voltar para 30, `_sv_frame_pace` devolve o modo do jogo e a duração de 33,3 ms, e `rt_pla_frame_dt_ns` passa o
+  passo fixo do jogo.
+- **Não validado em jogo** no momento deste registro. Próximo passo: desempenho para segurar 60 de verdade.
+
+### C. Atualizações de Versão
+- Versão elevada para **`v0.0.21`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

@@ -103,11 +103,16 @@ int32_t rt_za_frame_cfg(int32_t cfg) {
     return on ? 0 : cfg;
 }
 
+// Pokémon Legends: Arceus and Scarlet / Violet run in their own 30 fps mode, forced to 60 by tools/pla_patches.py /
+// sv_patches.py. Below 60 the master clock gets the real frame time (rt_pla_frame_dt_ns), but the rest of the game
+// (animations, the character's walk) still steps 1/60 s a frame: slow motion - Scarlet / Violet at ~38 fps on a Xeon +
+// Arc B580 looked like 15-20 fps, and ran smooth once set to 30. So the same backing off as Z-A's (fps60_holds: below
+// 50 fps for 5 s, back to 30 for the session, the overlay says so; F1's "60 fps (always)" keeps 60).
 bool rt_pla_is_60fps(void) {
     g_za_frame_hook = true;
     const char *e = ENV("LARECOMP_FPS");
     if (e) return atoi(e) >= 60;
-    return g_settings.fps60;
+    return fps60_holds();
 }
 
 // Pokémon Legends: Arceus & Pokémon Scarlet & Violet dynamic frame delta-time:
