@@ -105,7 +105,7 @@ static const char *build_version(const uint8_t id[8]) {
 static bool build_is_za(const uint8_t id[8]) { return build_version(id) && memcmp(id, BUILD_ID, 8); }
 // The release tag this build is (also names the release files; Makefile / tools/bundle_macos.sh / make_dmg.sh read
 // it): ZA Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
-#define LARECOMP_VERSION "v0.0.16"
+#define LARECOMP_VERSION "v0.0.17"
 extern "C" const char *rt_version(void) { return LARECOMP_VERSION; }  // (runtime/main.c: the log's first line)
 extern "C" const char *larecomp_version(void) { return LARECOMP_VERSION; }  // (the shader caches' tag)
 
@@ -1217,6 +1217,17 @@ static std::string g_mod_pick, g_mod_msg;  // a pick waiting to install; the las
 static std::string g_mod_installed;        // its folder name, for the UI thread to put first (g_mod_lock)
 static bool g_mod_failed;
 static std::atomic<bool> g_mod_busy{false}, g_mods_changed{true};
+
+// The Brazilian Portuguese translation by PKG Traduções (https://pkgtraducoes.com.br/): not shipped with the port (its
+// files are the game's texts), installed like any mod from the archive they publish - the Mods page offers their
+// download and credits them, as they asked in exchange for the permission. LARECOMP_PTBR_URL overrides the link.
+#define PTBR_DOWNLOAD_URL "https://drive.google.com/drive/folders/1Z_AzEoPSfvaUxr23TY9Lq2DbLgGoBmES"
+#define PTBR_SITE_URL "https://pkgtraducoes.com.br/"
+static bool mod_is_ptbr(const std::string &n) {  // (a folder named after a Portuguese translation: "Tradução PT-BR"...)
+    std::string l = n;
+    for (auto &c : l) c = (char)tolower((unsigned char)c);
+    return l.find("tradu") != std::string::npos || l.find("pt-br") != std::string::npos || l.find("ptbr") != std::string::npos;
+}
 
 static void mods_reload(void) {
     std::vector<std::string> names;
@@ -2789,6 +2800,29 @@ extern "C" void launcher_run(const char *root) {
                                                           "tradução, texturas, modelos. Mods que mexem no código do jogo "
                                                           "(exefs, IPS, cheats) não funcionam aqui. Se dois mods trocam o "
                                                           "mesmo arquivo, vale o que está mais acima."), w).y + 16;
+                {   // the PT-BR translation: PKG Traduções' download and their credit (installed: a pointer to its row)
+                    bool have = false;
+                    for (auto &m : g_mods) have |= mod_is_ptbr(m.name);
+                    float ch = 92;
+                    dl->AddRectFilled(P(x, y), P(x + w, y + ch), IM_COL32(242, 181, 68, 26), 14 * g_s);
+                    dl->AddRect(P(x, y), P(x + w, y + ch), IM_COL32(242, 181, 68, 110), 14 * g_s, 0, 1.2f * g_s);
+                    text(dl, F_LABEL, 17, x + 20, y + 14, C_GOLD_HI,
+                         TR("Brazilian Portuguese translation - by PKG Traduções", "Tradução para português do Brasil - por PKG Traduções"));
+                    text(dl, F_BODY, 13, x + 20, y + 42, C_SOFT,
+                         have ? TR("Installed: switch it on or off in the list below. Translation credits: PKG Traduções "
+                                   "(pkgtraducoes.com.br).", "Instalada: ligue ou desligue na lista abaixo. Créditos da tradução: "
+                                   "PKG Traduções (pkgtraducoes.com.br).")
+                              : TR("Download it, then drop the archive on this window (or use Install a mod below). "
+                                   "Translation credits: PKG Traduções.", "Baixe e depois arraste o arquivo para esta janela (ou use "
+                                   "Instalar um mod, aqui embaixo). Créditos da tradução: PKG Traduções."), w - 470);
+                    if (!have && button("##ptbr_dl", TR("Download", "Baixar"), x + w - 432, y + 24, 200, 44, BTN_PRIMARY, true, IC_GLOBE)) {
+                        const char *u = getenv("LARECOMP_PTBR_URL");
+                        SDL_OpenURL(u && *u ? u : PTBR_DOWNLOAD_URL);
+                    }
+                    if (button("##ptbr_site", TR("PKG's site", "Site da PKG"), x + w - 220, y + 24, 200, 44, BTN_SECONDARY, true, IC_GLOBE))
+                        SDL_OpenURL(PTBR_SITE_URL);
+                    y += ch + 14;
+                }
                 float list_h = H_ - 48 - 24 - 112 - 16 - y;
                 ImGui::SetCursorScreenPos(P(x, y));
                 ImGui::BeginChild("##modlist", S(w, list_h), 0, ImGuiWindowFlags_NavFlattened);
@@ -2815,8 +2849,9 @@ extern "C" void launcher_run(const char *root) {
                     ImVec2 is = text_size(F_H2, 16, ini.c_str());
                     text(cl, F_H2, 16, 34 - is.x / 2, 32 - is.y / 2, m.on ? IM_COL32(127, 230, 224, 255) : C_MUTED, ini.c_str());
                     text(cl, F_LABEL, 17, 70, 10, m.on ? C_TEXT : C_SOFT, m.name.c_str());
-                    char sub[96];
-                    snprintf(sub, sizeof sub, TR("%d files · mods/%s%s", "%d arquivos · mods/%s%s"), m.files, m.name.c_str(),
+                    char sub[192];
+                    snprintf(sub, sizeof sub, TR("%d files · mods/%s%s%s", "%d arquivos · mods/%s%s%s"), m.files, m.name.c_str(),
+                             mod_is_ptbr(m.name) ? TR(" · by PKG Traduções", " · por PKG Traduções") : "",
                              m.on ? "" : TR(" · off", " · desligado"));
                     text(cl, F_BODY, 13, 70, 36, C_MUTED, sub);
                     ImGui::PushID(i);

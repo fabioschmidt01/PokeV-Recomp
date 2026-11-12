@@ -66,7 +66,8 @@ available in the F1 menu; not all of them have been validated with *Pokémon Vio
 - **HD texture packs**: an *Original / HD* switch in the menu loads replacement textures from `textures/hd/`.
 - **Mods**: `mods/<name>/romfs` layers over the game's files, each switched on or off in the start screen's Mods tab.
   A Brazilian Portuguese translation by [PKG Traduções](https://pkgtraducoes.com.br/) installs this way (not included:
-  get it from them).
+  get it from them). The Mods tab links their download and credits them.
+- **Save backups**: each save is also copied to `save/backups/` (the 10 newest, at most one every 5 minutes).
 
 ### Controls
 - Gamepads through SDL3 (Xbox, DualShock 4, DualSense, Switch Pro Controller, Steam Deck).

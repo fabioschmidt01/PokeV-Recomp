@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #ifdef _WIN32
 #include <io.h>
@@ -1069,6 +1070,73 @@ static void drop_slot(const char *path) {
 }
 // Commit always succeeds for the game (see save_failed). A save that failed is dropped whole. If only the sidecar's
 // rename failed (the data is already replaced), its working copy stays for the next mount to finish the pair.
+// Rotating backups of the committed saves (as PokeL-ARecomp's): <save dir>/backups/<file>_<date>_<time>.bak, the 10
+// newest per file kept, at most one every 5 minutes (Scarlet / Violet's autosave commits often, and 10 copies a few
+// seconds apart would all hold the same trouble). A copy of what was just committed: an older one is there to go back
+// to when a save goes bad. ~4.4 MB each for Scarlet / Violet's main. LARECOMP_SAVE_BACKUPS=0: none.
+static int backup_name_cmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+static void save_auto_backup(const char *path) {
+    static int on = -1;
+    static time_t last;
+    if (on < 0) on = !getenv("LARECOMP_SAVE_BACKUPS") || atoi(getenv("LARECOMP_SAVE_BACKUPS")) != 0;
+    time_t now = time(NULL);
+    if (!on || (last && now - last < 5 * 60)) return;
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    if (!*base || strlen(base) > 64) return;
+    FILE *in = fopen(path, "rb");
+    if (!in) return;
+    char dir[600], dest[800];
+    snprintf(dir, sizeof dir, "%s/backups", g_save_dir);
+    mkdir(dir, 0755);
+    struct tm tmv, *tm = localtime(&now);
+    if (tm) tmv = *tm;
+    if (tm) snprintf(dest, sizeof dest, "%s/%s_%04d%02d%02d_%02d%02d%02d.bak", dir, base, tmv.tm_year + 1900, tmv.tm_mon + 1,
+                     tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    else snprintf(dest, sizeof dest, "%s/%s_%llu.bak", dir, base, (unsigned long long)now);
+    FILE *out = fopen(dest, "wb");
+    bool ok = out != NULL;
+    long total = 0;
+    if (ok) {
+        char buf[65536];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof buf, in)) > 0)
+            if (fwrite(buf, 1, n, out) != n) { ok = false; break; }
+            else total += (long)n;
+        if (ferror(in)) ok = false;
+        if (fclose(out)) ok = false;
+    }
+    fclose(in);
+    if (!ok) {
+        if (out) unlink(dest);
+        LOG("[save-backup] could not write %s (%s)
+", dest, strerror(errno));
+        return;
+    }
+    last = now;
+    LOG("[save-backup] %s (%ld bytes)
+", dest, total);
+    // keep the 10 newest of this file (the names sort by time)
+    DIR *d = opendir(dir);
+    if (!d) return;
+    static char names[64][96];
+    int count = 0;
+    size_t bl = strlen(base);
+    for (struct dirent *e; (e = readdir(d)) && count < 64;) {
+        size_t nl = strlen(e->d_name);
+        if (nl < sizeof names[0] && nl > bl + 5 && !strncmp(e->d_name, base, bl) && e->d_name[bl] == '_' &&
+            !strcmp(e->d_name + nl - 4, ".bak"))
+            memcpy(names[count++], e->d_name, nl + 1);
+    }
+    closedir(d);
+    if (count <= 10) return;
+    qsort(names, (size_t)count, sizeof names[0], backup_name_cmp);
+    for (int i = 0; i < count - 10; i++) {
+        snprintf(dest, sizeof dest, "%s/%s", dir, names[i]);
+        unlink(dest);
+    }
+}
+
 static void commit(HostFs *fs) {
     extern void pace_hitch(const char *why);  // nvn/pace.c
     if (fs->npending) pace_hitch("a save commit");
@@ -1087,7 +1155,10 @@ static void commit(HostFs *fs) {
                 save_failed(fs, "could not commit", path, error);
             } else LOG("[save] committed %s, but not its flags sidecar yet (%s): the next mount finishes it\n", path,
                        strerror(error));
-        } else LOG("[save] committed %s\n", path);
+        } else {
+            LOG("[save] committed %s\n", path);
+            save_auto_backup(path);
+        }
     }
     fs->npending = 0;
 }

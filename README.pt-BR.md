@@ -69,7 +69,9 @@ disponíveis no menu F1; nem todos foram validados com o *Pokémon Violet* ainda
 - **Pacotes de texturas HD**: a opção *Originais / HD* do menu carrega texturas de substituição de `textures/hd/`.
 - **Mods**: `mods/<nome>/romfs` em camadas sobre os arquivos do jogo, cada um ligado ou desligado na aba Mods da tela
   inicial. A tradução para português do Brasil da [PKG Traduções](https://pkgtraducoes.com.br/) é instalada assim (não
-  vem incluída: baixe com eles).
+  vem incluída: baixe com eles). A aba Mods tem o link para baixar e os créditos.
+- **Backup dos saves**: cada save também é copiado para `save/backups/` (os 10 mais novos, no máximo um a cada
+  5 minutos).
 
 ### Controles
 - Controles via SDL3 (Xbox, DualShock 4, DualSense, Switch Pro Controller, Steam Deck).

@@ -761,4 +761,34 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 25. Tradução da PKG na Aba Mods, Backup Automático do Save, Rótulos do F1 (v0.0.17)
+
+### A. Tradução PT-BR (PKG Traduções)
+- A PKG Traduções autorizou o uso da tradução com os devidos créditos. Ela **não** vai dentro da release (os arquivos são
+  os textos do jogo, traduzidos): a aba Mods ganhou um cartão "Tradução para português do Brasil - por PKG Traduções"
+  com o botão **Baixar** (abre a pasta de download no navegador; `LARECOMP_PTBR_URL` troca o link) e **Site da PKG**.
+  O arquivo baixado é instalado arrastando para a janela ou pelo instalador de mods que já existia.
+- Com a tradução instalada, o cartão diz que ela está instalada e a linha do mod mostra "por PKG Traduções".
+- Pendente: a pasta do Google Drive pede login para quem não é o dono; precisa ser compartilhada como "qualquer pessoa
+  com o link" para funcionar para os outros jogadores.
+
+### B. Backup automático do save (trazido do PokeL-ARecomp v0.26.1)
+- Após cada save confirmado, uma cópia em `save/backups/<arquivo>_<data>_<hora>.bak`; ficam as 10 mais novas por
+  arquivo, no máximo uma a cada 5 minutos (o autosave do Violet confirma com frequência). `LARECOMP_SAVE_BACKUPS=0`
+  desliga.
+
+### C. Menu F1: rótulo cortado antes do valor (trazido do PokeL-ARecomp v0.0.26)
+- `option_rows.mm`: o rótulo é desenhado por último e cortado antes do valor / das setas, em vez de passar por baixo.
+
+### D. Não trazido
+- VSync do PokeL-ARecomp: o PokeV já tem "Ritmo dos quadros: Padrão / Suave" (Suave = FIFO = VSync); o modo sem limite
+  (Immediate) fica para junto da geração de quadros.
+
+**Não compilado localmente.**
+
+### E. Atualizações de Versão
+- Versão elevada para **`v0.0.17`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
