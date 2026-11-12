@@ -923,4 +923,26 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 32. Cabelo Azul: Diagnóstico do F9 Corrigido (v0.0.25)
+
+### A. O que o dump da v0.0.24 mostrou
+- O usuário notou que **a cor do cabelo muda conforme a câmera gira** (violeta, azul, ciano): sinal de reflexo /
+  especular, que depende da direção do olhar.
+- No G-buffer (albedo) o cabelo é azul-marinho escuro e a parede de hexágonos é branca; logo depois da iluminação
+  (fs 74421cd200) o cabelo sai ciano brilhante e a parede azul saturado. O erro está na iluminação, não na cor base.
+- O shader de iluminação lê o modelo de sombreamento dos bits 0..2 do stencil (bit 6 descarta; bits 3..5 escolhem
+  caminhos que usam a tex3); modelos 4..7 têm caminhos próprios, e o modelo indexa uma tabela no cb3 (+496).
+  Reflexo: cubemaps tex9 (64x64, nível 0) e tex10 (64x64, 7 níveis), BC6H.
+
+### B. Correção da ferramenta
+- O arquivo `stencil_00_tex0.pgm` veio só com `00 00 00 FF`: a cópia do stencil era gravada **dentro** da passada de
+  renderização da iluminação (inválido no Vulkan); o driver da Intel a descartou e o arquivo ficou com a leitura
+  anterior (o PNG preto do pass_016). `debug_save_stencil` e `debug_save_depth` agora encerram a passada antes
+  (`vk_end_pass`, como `renderer_save_texture_tex`), e o buffer começa preenchido com 0x55 para denunciar uma cópia
+  que ainda não chegue.
+- Novo: as 6 faces dos cubemaps da iluminação vão para `build/textures/cube_<n>_tex<i>_f<face>.png`.
+- Só diagnóstico (F9); o jogo não recompila. Versão **`v0.0.25`**.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

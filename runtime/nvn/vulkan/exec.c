@@ -3033,6 +3033,7 @@ static TexBackend *snapshot_image(NvnTexture *t, TexBackend *src) {
 static void debug_save_depth(TexBackend *b, const char *path) {
     if (!b || !b->image || !(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || b->format != VK_FORMAT_D32_SFLOAT_S8_UINT) return;
     uint64_t n = (uint64_t)b->width * b->height;
+    vk_end_pass();  // (no copies inside a render pass: debug_save_stencil)
     VkSpan out = vk_readback(n * 4);
     VkCommandBuffer cb = vk_cmd();
     vk_full_barrier(cb);
@@ -3057,7 +3058,12 @@ static void debug_save_depth(TexBackend *b, const char *path) {
 static void debug_save_stencil(TexBackend *b, const char *path) {
     if (!b || !b->image || !(b->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) || b->samples != 1) return;
     uint64_t n = (uint64_t)b->width * b->height;
+    // (a copy inside a render pass is invalid: v0.0.20-24 recorded it in the middle of the lighting pass, Intel's driver
+    // dropped it, and the file held the previous readback - a pass PNG's opaque black, 00 00 00 ff. The draw begins
+    // its pass again, as after renderer_save_texture_tex.)
+    vk_end_pass();
     VkSpan out = vk_readback((n + 3) & ~3ull);
+    memset(out.ptr, 0x55, (size_t)n);  // (a copy that still doesn't land shows as 0x55, not as an old readback)
     VkCommandBuffer cb = vk_cmd();
     vk_full_barrier(cb);
     VkBufferImageCopy c = {.bufferOffset = out.off, .imageSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 0, 1},
@@ -7396,6 +7402,24 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
                 mkdir("build/textures", 0755);
                 snprintf(path, sizeof path, "build/textures/stencil_%02d_tex%d.pgm", nsten++, i);
                 debug_save_stencil((TexBackend *)b, path);
+            }
+        }
+        // (the same: the lighting's environment cubes - the blue hair changes colour as the camera turns, a reflection's
+        // tell) each face of their first level: build/textures/cube_<n>_tex<i>_f<face>.png (HDR values clip at 1)
+        if (!indexed && r->x[2] == 3 && pr->fi->ntex >= 6 && st.rt.ncolor && st.rt.color[0] && st.rt.color[0]->format == 0x3F && b &&
+            (pr->fi->tex[i].type == TEXTYPE_CUBE || pr->fi->tex[i].type == TEXTYPE_CUBE_ARRAY) && b->layers >= 6 &&
+            b->samples == 1 && !(b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) {
+            static int ncube;
+            if (ncube < 4) {
+                mkdir("build/textures", 0755);
+                for (uint32_t f = 0; f < 6; f++) {
+                    char path[96];
+                    snprintf(path, sizeof path, "build/textures/cube_%02d_tex%d_f%u.png", ncube, i, f);
+                    raw_layer = f;
+                    renderer_save_texture_tex((TexBackend *)b, path);
+                }
+                raw_layer = 0;
+                ncube++;
             }
         }
         if (t->format == 0x1 && t->width >= 256 && t->addr) {  // (R8 atlases, e.g. a glyph cache: guest bytes vs the GPU copy)
