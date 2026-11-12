@@ -2224,6 +2224,34 @@ static inline const GWin *gwin(void) {
 // bytes of the window the game has set up: the heap size, or the whole physical region
 static uint64_t gwin_want(void) { return gwin()->phys ? gwin_.max : kernel_heap_size(); }
 
+// (debug) LARECOMP_GLSL_OVERRIDE=1: a file glsl_override/<code address>.{vert,frag} (the names LARECOMP_DUMP_GLSL
+// writes under build/glsl) replaces that stage's translation - a hand-edited copy, to bisect a shader bug in the game
+// without a new build (Scarlet / Violet's blue hair: which term of the lighting shader glows). It must keep the
+// translation's resources (bindings, inputs, outputs); a file that doesn't compile fails the program as a bad
+// translation would. The translation cache keeps the original. The files are the player's own, never shipped.
+static void glsl_override(ShaderInfo *si, uint64_t addr, const char *ext) {
+    static int on = -1;
+    if (on < 0) on = ENV("LARECOMP_GLSL_OVERRIDE") && atoi(ENV("LARECOMP_GLSL_OVERRIDE")) != 0;
+    if (!on || !si || !si->msl || !addr) return;
+    char path[96];
+    snprintf(path, sizeof path, "glsl_override/%llx.%s", (unsigned long long)addr, ext);
+    FILE *f = fopen(path, "rb");
+    if (!f) return;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = n > 0 && n < (64l << 20) ? malloc((size_t)n + 1) : NULL;
+    if (src && fread(src, 1, (size_t)n, f) == (size_t)n) {
+        src[n] = 0;
+        si->msl = src;  // (the translation's text stays allocated: a cached ShaderInfo may share it)
+        LOG("[shader] %s replaces the translation (LARECOMP_GLSL_OVERRIDE)\n", path);
+    } else {
+        free(src);
+        LOG("[shader] %s: unreadable, translation kept\n", path);
+    }
+    fclose(f);
+}
+
 static void gmem_window_get(uint64_t *lo, uint64_t *len);  // (the guest-heap import window, below)
 // Translates both stages (false: failed, logged). Holds the translator for the whole program.
 static bool translate_program_now(Prog *p) {
@@ -2238,6 +2266,8 @@ static bool translate_program_now(Prog *p) {
         p->fi = p->code[1] ? maxwell_translate((const uint8_t *)(uintptr_t)p->code[1], p->cmax[1], STAGE_FRAGMENT, &p->fkey)
                            : maxwell_empty_fragment();
     }
+    glsl_override(p->vi, p->code[0], "vert");
+    if (p->code[1]) glsl_override(p->fi, p->code[1], "frag");
     if (ENV("LARECOMP_DUMP_GLSL")) {  // (debug) build/glsl/<code address>.{vert,frag}[.asm]: source and disassembly
         mkdir("build/glsl", 0755);
         for (int sg = 0; sg < 2; sg++) {

@@ -945,4 +945,25 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 33. Cabelo Azul: Stencil Lido e Ferramenta de Substituição de GLSL (v0.0.26)
+
+### A. Dump da v0.0.25 (stencil agora válido)
+- Modelo de sombreamento por pixel (bits 0..2 do stencil): céu 0, chão / árvores 1, **roupa 4**, **rosto 5
+  (parâmetro 2)**, **cabelo 7 (parâmetro 3)**.
+- O caminho do parâmetro 3 lê da tex3 um vetor (direção dos fios, para o brilho anisotrópico); a tex3 no cabelo tem
+  vetores suaves, aparentemente corretos. As 6 faces dos cubemaps de reflexo (tex9 / tex10, BC6H 64x64) são
+  coerentes (céu em cima, chão embaixo).
+- O cabelo sai da iluminação com valores enormes (brilho com halo no bloom), mudando de cor com a câmera: o erro
+  está no trecho do shader exclusivo do modelo 7 / parâmetro 3. O recolorizador herdado do Link's Awakening
+  (`ltint`) fica zerado no Violet e não é a causa.
+
+### B. Ferramenta
+- `LARECOMP_GLSL_OVERRIDE=1`: um arquivo `glsl_override/<endereço>.{vert,frag}` (os nomes que
+  `LARECOMP_DUMP_GLSL` grava em `build/glsl`) substitui a tradução daquele estágio (`exec.c glsl_override`). Serve
+  para bisseção de um bug de shader editando o GLSL à mão, sem novo build. O cache de traduções guarda a original;
+  os arquivos são do jogador (gerados do jogo) e nunca vão para o repositório.
+- Versão **`v0.0.26`**. Só diagnóstico; o jogo não recompila.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
