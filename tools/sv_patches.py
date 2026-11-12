@@ -14,12 +14,25 @@ def _sv_frame_clock(gen, a):
     # The value is converted to double (scvtf d0, d0), divided by 1e9 (fdiv d0, d0, d1) and float s0
     # is passed to f_7000c9cdfc to advance the game simulation.
     # Returning real wall-clock delta-time (16.67ms at 60 FPS) eliminates 2x speed-up and prevents slow-motion!
+    #
+    # The rest of the game steps by the clock manager's slots, not by this value: each frame (0x7002b7a8f4..) the
+    # manager's SetSlotMode(slot, mode) (0x7002b7b308) copies the mode's duration from the table at 0x7003c2fba8
+    # (16.67 / 33.3 / 50 / 66.7 / 83.3 ms) into slot i (manager + 8 + 16 i, duration at +8: GetSlot 0x7002b7b2fc), and
+    # systems read slot 1 directly or as a speed factor, slot 1 / (table[mode] - 1) (0x7000b83d1c, 0x7000d96428). With
+    # the 60 fps mode forced, the slots held 16.67 ms however long the frame took: below 60 fps the world, animations
+    # and the character's walk moved in slow motion (~38 fps looked like 15-20; 30 fps ran smooth). x0 here is slot 0
+    # (GetSlot(0)), and the simulation step (bl 0x7000c9cdfc) comes before SetSlotMode, so the real frame time written
+    # into slots 0 and 1 now is what this frame's update reads; the table keeps its nominal 16.67 ms, so the factor
+    # readers get real / nominal. Both slot classes seen have 2+ slots (GetSlotCount: 2, 7). rt_sv_slot_dt(): off with
+    # LARECOMP_SV_SLOT_DT=0.
     w = struct.unpack_from('<I', gen.nso.image, a - gen.base)[0]
     assert w == 0xfd400400, hex(w)  # ldr d0, [x0, #8]
-    return ('{ extern uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns); '
+    return ('{ extern uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns); extern _Bool rt_sv_slot_dt(void); '
             'uint64_t orig_ns = c->x[0] ? LD64(c->x[0] + 8) : 0x01fca056ull; '
-            'c->v[0] = (uint64_t)rt_pla_frame_dt_ns(0, orig_ns); }'
-            f'  /* {a:#x}: SV 3.0.1 dynamic frame clock delta-time (ns) */')
+            'uint64_t dt_ns = rt_pla_frame_dt_ns(0, orig_ns); '
+            'if (c->x[0] && dt_ns != orig_ns && rt_sv_slot_dt()) { ST64(c->x[0] + 8, dt_ns); ST64(c->x[0] + 0x18, dt_ns); } '
+            'c->v[0] = dt_ns; }'
+            f'  /* {a:#x}: SV 3.0.1 dynamic frame clock delta-time (ns), into clock slots 0 and 1 */')
 
 
 def _sv_frame_pace(gen, a):

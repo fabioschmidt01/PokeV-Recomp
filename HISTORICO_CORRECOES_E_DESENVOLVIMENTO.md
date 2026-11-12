@@ -849,4 +849,33 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 28. Relógios do Jogo pelo Tempo Real: Liso Abaixo de 60 fps (v0.0.22)
+
+### A. Motivo
+- O usuário lembrou que o Legends: Arceus (PokeL-ARecomp) roda liso a 45-50 fps: voltar para 30 (seção 27) não é o
+  certo; o Violet deveria andar pelo tempo real como o Arceus.
+
+### B. O que o código do jogo faz (main 3.0.1)
+- Cada quadro, em `f_7002b79f68`: lê o relógio (0x7002b7a784, onde já estava o nosso patch), avança a simulação
+  (`bl 0x7000c9cdfc`) e depois chama `SetSlotMode(slot, modo)` (0x7002b7b308) nos slots do gerenciador de relógio, que
+  copia a duração do modo da tabela em 0x7003c2fba8 (16,67 / 33,3 / 50 / 66,7 / 83,3 ms) para o slot
+  (`SetSlotDuration`: gerenciador + slot x 16 + 0x10; `GetSlot` 0x7002b7b2fc).
+- Sistemas leem o slot 1 direto ou como fator de velocidade, slot 1 / (tabela[modo] - 1) (0x7000b83d1c, 0x7000d96428).
+- Com o modo 60 fps forçado, os slots ficavam em 16,67 ms qualquer que fosse a duração do quadro: câmera lenta
+  abaixo de 60.
+
+### C. Correção
+- `tools/sv_patches.py` `_sv_frame_clock`: além de devolver o tempo real ao relógio mestre, grava esse tempo nos slots 0
+  e 1 (x0 é o slot 0 nesse ponto), antes do passo da simulação do quadro. A tabela fica com o valor nominal, então os
+  leitores de fator recebem real / nominal. `LARECOMP_SV_SLOT_DT=0` desliga (log `[pace] ... clock slots`).
+- `rt_pla_is_60fps` volta a não cair para 30 sozinho (a volta automática da v0.0.21 sai).
+- `tools/sv_patches.py` não estava em `GAMELIB_SRCS` (Makefile): mudanças nele não forçavam recompilar o jogo e
+  nunca chegavam a quem já tinha o `lasgame.dll`. Incluído.
+- **Muda o gerador: o jogo recompila uma vez** (10-30 min). **Não validado em jogo** no momento deste registro.
+
+### D. Atualizações de Versão
+- Versão elevada para **`v0.0.22`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

@@ -104,15 +104,25 @@ int32_t rt_za_frame_cfg(int32_t cfg) {
 }
 
 // Pokémon Legends: Arceus and Scarlet / Violet run in their own 30 fps mode, forced to 60 by tools/pla_patches.py /
-// sv_patches.py. Below 60 the master clock gets the real frame time (rt_pla_frame_dt_ns), but the rest of the game
-// (animations, the character's walk) still steps 1/60 s a frame: slow motion - Scarlet / Violet at ~38 fps on a Xeon +
-// Arc B580 looked like 15-20 fps, and ran smooth once set to 30. So the same backing off as Z-A's (fps60_holds: below
-// 50 fps for 5 s, back to 30 for the session, the overlay says so; F1's "60 fps (always)" keeps 60).
+// sv_patches.py, and step by the real frame time below 60 (rt_pla_frame_dt_ns; Scarlet / Violet's clock slots too,
+// sv_patches.py _sv_frame_clock): 45-50 fps plays at normal speed, so no backing off to 30 here (v0.0.21 had Z-A's,
+// fps60_holds, while the slots still stepped 1/60 s - Arceus never needed it).
 bool rt_pla_is_60fps(void) {
     g_za_frame_hook = true;
     const char *e = ENV("LARECOMP_FPS");
     if (e) return atoi(e) >= 60;
-    return fps60_holds();
+    return g_settings.fps60;
+}
+// Scarlet / Violet: the real frame time also goes into the game's clock slots 0 and 1 (sv_patches.py _sv_frame_clock).
+// LARECOMP_SV_SLOT_DT=0: not (the master clock only, as before v0.0.22 - slow motion below 60 fps).
+bool rt_sv_slot_dt(void) {
+    static int on = -1;
+    if (on < 0) {
+        const char *e = ENV("LARECOMP_SV_SLOT_DT");
+        on = !e || atoi(e) != 0;
+        LOG("[pace] Scarlet / Violet clock slots follow the real frame time: %s\n", on ? "on" : "off (LARECOMP_SV_SLOT_DT=0)");
+    }
+    return on;
 }
 
 // Pokémon Legends: Arceus & Pokémon Scarlet & Violet dynamic frame delta-time:
