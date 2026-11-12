@@ -1,4 +1,4 @@
-// Where LAS Recomp keeps its files (runtime/paths.c).
+// Where PokeV-Recomp keeps its files (runtime/paths.c).
 //
 // Data root: everything the app writes or the user brings - extracted/ (game files), rando/ (seeds), save/,
 // cache/ (shaders / pipelines), fonts/ (imported), larecomp.ini. rt_paths_init() picks it and makes it the
@@ -10,8 +10,9 @@
 //      app); asks to try again / use the default when it's missing (a drive not connected)
 //   4. macOS: ~/Library/Application Support/com.peiikai.lasrecomp (the .app bundle itself is never written to)
 //      Windows: the folder of the .exe (portable, no installer); refuses to start, with a message, if not writable
-//      Linux: $XDG_DATA_HOME/zarecomp (~/.local/share/zarecomp; Pokémon Z-A: not LAS Recomp's lasrecomp/, its saves
-//      and larecomp.ini would be shared)
+//      Linux: $XDG_DATA_HOME/pokev-recomp (~/.local/share/pokev-recomp, RT_LINUX_DATA_DIR): PokeV-Recomp's own - not
+//      LAS Recomp's lasrecomp/, ZA Recomp's zarecomp/ or PokeL-ARecomp's plarecomp/ (their saves, larecomp.ini and
+//      extracted/ would be shared; v0.0.24 and earlier used plarecomp/ by mistake, issue #1)
 //      LARECOMP_DATA_HOME (tests) stands in for it.
 //
 // Resources: files that ship with the app (helper programs, the window icon) - next to the executable (the
@@ -25,6 +26,7 @@ extern "C" {
 #endif
 
 #define RT_BUNDLE_ID "com.peiikai.lasrecomp"
+#define RT_LINUX_DATA_DIR "pokev-recomp"  // (under $XDG_DATA_HOME, else ~/.local/share)
 
 void rt_paths_init(void);         // first thing in main(), after plat_init
 const char *rt_data_root(void);   // absolute
@@ -65,6 +67,10 @@ bool rt_resource(const char *name, const char *dev_rel, char *out, size_t n);
 bool rt_remove_game_file(const char *game_dir, const char *name);
 // All the game files set up there (rt_remove_game_file on each, then the empty folder). Saves, seeds, settings stay.
 bool rt_remove_game_files(const char *game_dir);
+// game_dir holds another recomp's game files (Legends: Arceus, Z-A, Link's Awakening: runtime/game_identity.h): never
+// deleted or written over (rt_remove_game_files refuses them; the start screen's setup stops). what: "Pokémon Legends:
+// Arceus 1.1.1". Pokémon Violet's own files, unknown builds and no files: false.
+bool rt_game_files_foreign(const char *game_dir, char *what, size_t n);
 // Bytes taken by the extracted game files in game_dir (links not followed).
 unsigned long long rt_game_files_size(const char *game_dir);
 // Bytes taken by everything under path (links not followed).

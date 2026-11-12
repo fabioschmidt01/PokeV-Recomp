@@ -7,6 +7,7 @@
 #include "game_addresses.h"
 #include "gamelib.h"
 #include "paths.h"
+#include "game_identity.h"
 #include "settings.h"
 #include "hle.h"
 #include "kernel.h"
@@ -63,7 +64,7 @@ static void log_system(void) {
              __builtin_cpu_supports("avx2") ? "yes" : "no", __builtin_cpu_supports("fma") ? "yes" : "no",
              __builtin_cpu_supports("bmi2") ? "yes" : "no", gamelib_old_cpu() ? "v2" : "v3");
 #endif
-    LOG("[system] ZA Recomp %s | %s | CPU: %s (%d threads%s) | RAM %d GB\n", rt_version(), os, cpu,
+    LOG("[system] PokeV-Recomp %s | %s | CPU: %s (%d threads%s) | RAM %d GB\n", rt_version(), os, cpu,
         SDL_GetNumLogicalCPUCores(), feat, (SDL_GetSystemRAM() + 512) / 1024);
 #ifdef _WIN32
     plat_run_begin();
@@ -268,7 +269,7 @@ static void log_startup_info(void) {
     char ram[32] = "RAM unknown";
     if (si.ram && tenths % 10) snprintf(ram, sizeof ram, "%llu.%llu GB RAM", tenths / 10, tenths % 10);
     else if (si.ram) snprintf(ram, sizeof ram, "%llu GB RAM", tenths / 10);
-    fprintf(stderr, "[info] ZA Recomp %s, %s, %s%s, %s%s%s\n", larecomp_version(), si.os[0] ? si.os : "unknown OS",
+    fprintf(stderr, "[info] PokeV-Recomp %s, %s, %s%s, %s%s%s\n", larecomp_version(), si.os[0] ? si.os : "unknown OS",
             si.cpu[0] ? si.cpu : "unknown CPU", cores, ram, si.package ? ", " : "", si.package ? si.package : "");
 }
 
@@ -301,19 +302,14 @@ int main(int argc, char **argv) {
         else if (argv[i][0] != '-') root = arg_root;
     }
     rt_paths_init();  // the data root becomes the working directory (runtime/paths.h)
-    {   // Pokémon Legends Z-A (exefs/main build 7222e13ecf6adb32: 1.0.0, 8a1c86c437394b69: 2.0.0,
-        // b1f12fd919eae86a: 2.0.2): the start screen sets its files up from the player's packages (zaimport). Started
-        // without a log redirect (a double click): the log goes to logs/play.log (the previous one: logs/play-anterior.log).
-        static const uint8_t za_build[][8] = {{0x72, 0x22, 0xe1, 0x3e, 0xcf, 0x6a, 0xdb, 0x32},
-                                              {0x8a, 0x1c, 0x86, 0xc4, 0x37, 0x39, 0x4b, 0x69},
-                                              {0xb1, 0xf1, 0x2f, 0xd9, 0x19, 0xea, 0xe8, 0x6a},
-                                              {0xae, 0xe8, 0xf1, 0x50, 0xdd, 0xa1, 0xb5, 0xa8}};
+    {   // Pokémon Violet 3.0.1 (runtime/game_identity.h; until v0.0.24 this list was Z-A's and Arceus's builds, copied
+        // over, and Violet's own wasn't in it): the start screen sets its files up from the player's packages
+        // (zaimport). Started without a log redirect (a double click): the log goes to logs/play.log (the previous one:
+        // logs/play-anterior.log).
         char mp[1100];
         uint8_t id[8] = {0};
         snprintf(mp, sizeof mp, "%s/exefs/main", root);
-        FILE *f = fopen(mp, "rb");
-        if (f) { fseek(f, 0x40, SEEK_SET); if (fread(id, 1, 8, f) != 8) memset(id, 0, 8); fclose(f); }
-        if (!memcmp(id, za_build[0], 8) || !memcmp(id, za_build[1], 8) || !memcmp(id, za_build[2], 8) || !memcmp(id, za_build[3], 8)) {
+        if (game_identity_read(mp, id) && game_identity_supported(id)) {
             // (the start screen is ZA Recomp's own since v0.1.9: shown on every start, set up or not - Play,
             // Mods, Saves; --play still goes straight into the game)
 #ifdef _WIN32

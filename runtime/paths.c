@@ -17,6 +17,7 @@
 #endif
 
 #include "gamelib.h"
+#include "game_identity.h"
 #include "paths.h"
 #include "platform.h"
 
@@ -129,10 +130,13 @@ static void default_home(char *root, size_t n) {
 #ifdef _WIN32
     exe_dir(root, n);
 #elif defined(__linux__)
-    // (the AppImage is read-only): $XDG_DATA_HOME/plarecomp, ~/.local/share/plarecomp by default (Pokémon Legends: Arceus)
+    // (the AppImage is read-only): $XDG_DATA_HOME/pokev-recomp, ~/.local/share/pokev-recomp by default. PokeV-Recomp's
+    // own: until v0.0.24 this was PokeL-ARecomp's plarecomp/ (copied over with its code), so both shared settings,
+    // saves and extracted/ - and Arceus's game files there showed up as PokeV's (issue #1). That folder is never read,
+    // moved or migrated from here: it belongs to the other app.
     const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
-    if (xdg && *xdg == '/') snprintf(root, n, "%s/plarecomp", xdg);
-    else snprintf(root, n, "%s/.local/share/plarecomp", home && *home ? home : "/tmp");
+    if (xdg && *xdg == '/') snprintf(root, n, "%s/" RT_LINUX_DATA_DIR, xdg);
+    else snprintf(root, n, "%s/.local/share/" RT_LINUX_DATA_DIR, home && *home ? home : "/tmp");
 #else
     const char *home = getenv("HOME");
     snprintf(root, n, "%s/Library/Application Support/" RT_BUNDLE_ID, home && *home ? home : "/tmp");
@@ -301,12 +305,12 @@ void rt_paths_init(void) {
         while (pointer_root(g_home, ptr, sizeof ptr)) {  // another folder chosen on the start screen
             if (is_dir(ptr) && writable(ptr)) { snprintf(root, sizeof root, "%s", ptr); break; }
             char msg[1400];
-            snprintf(msg, sizeof msg, "LAS Recomp's data folder isn't available:\n%s\n\nIf it's on a drive that isn't "
+            snprintf(msg, sizeof msg, "PokeV-Recomp's data folder isn't available:\n%s\n\nIf it's on a drive that isn't "
                      "connected, connect it and try again.", ptr);
             const SDL_MessageBoxButtonData b[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Try again"},
                                                   {0, 1, "Use the default folder"},
                                                   {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Quit"}};
-            const SDL_MessageBoxData box = {SDL_MESSAGEBOX_WARNING, NULL, "LAS Recomp", msg, 3, b, NULL};
+            const SDL_MessageBoxData box = {SDL_MESSAGEBOX_WARNING, NULL, "PokeV-Recomp", msg, 3, b, NULL};
             int k = 2;
             if (!SDL_ShowMessageBox(&box, &k)) fprintf(stderr, "%s\n", msg);
             if (k == 2) exit(1);
@@ -419,9 +423,28 @@ bool rt_remove_game_file(const char *game_dir, const char *name) {
     return is_dir(p) ? plat_remove_tree(p) : remove(p) == 0;  // (plat_remove_tree doesn't follow links inside)
 }
 
+bool rt_game_files_foreign(const char *game_dir, char *what, size_t n) {
+    char main_path[1100];
+    uint8_t id[8];
+    snprintf(main_path, sizeof main_path, "%s" SEP "exefs" SEP "main", game_dir);
+    const GameIdentity *g = game_identity_read(main_path, id) ? game_identity_find(id) : NULL;
+    if (!g || g->supported) return false;
+    if (what && n) snprintf(what, n, "%s %s", g->game, g->version);
+    return true;
+}
+
 bool rt_remove_game_files(const char *game_dir) {
     if (!game_dir_ok(game_dir)) {
         fprintf(stderr, "[paths] refusing to delete game files in %s (not <data root>/extracted)\n", game_dir);
+        return false;
+    }
+    // Another recomp's game files (Legends: Arceus, Z-A, Link's Awakening: runtime/game_identity.h) are never ours to
+    // delete: they only get here when the data root is that app's folder (LARECOMP_DATA_ROOT, a data_root.txt, or
+    // started from inside it - dev mode), and setting up or "Delete the game files" would wipe them (issue #1).
+    // Pokémon Violet's own files and unknown builds (an interrupted or wrong-version setup's) are removed as before.
+    char what[160];
+    if (rt_game_files_foreign(game_dir, what, sizeof what)) {
+        fprintf(stderr, "[paths] refusing to delete game files in %s: they are %s's, another app's\n", game_dir, what);
         return false;
     }
     bool ok = true;
@@ -526,7 +549,7 @@ static unsigned long long entries_size(const char *dir) {
     return n;
 }
 
-// LAS Recomp's data (an unfinished copy too), or nothing yet
+// PokeV-Recomp's data (an unfinished copy too), or nothing yet
 static bool usable_dir(const char *dir) {
     char p[1100];
     join(p, sizeof p, dir, MARK_PARTIAL);
@@ -541,10 +564,10 @@ void rt_data_target(const char *picked, RtDataTarget *t) {
         snprintf(t->refuse, sizeof t->refuse, "That folder can't be opened.");
         return;
     }
-    // the folder itself when it's empty, LAS Recomp's data, or the platform's folder; otherwise a "LAS Recomp"
+    // the folder itself when it's empty, PokeV-Recomp's data, or the platform's folder; otherwise a "PokeV-Recomp"
     // folder in it
     if (same_dir(r, g_home) || usable_dir(r)) snprintf(t->path, sizeof t->path, "%s", r);
-    else join(t->path, sizeof t->path, r, "LAS Recomp");
+    else join(t->path, sizeof t->path, r, "PokeV-Recomp");
     join(p, sizeof p, t->path, MARK_PARTIAL);
     t->has_data = has_entries(t->path) && !exists(p);
     t->bytes = entries_size(g_root);
@@ -556,7 +579,7 @@ void rt_data_target(const char *picked, RtDataTarget *t) {
     else if (within(t->path, root)) snprintf(t->refuse, sizeof t->refuse, "That folder is inside the data folder.");
     else if (within(root, t->path)) snprintf(t->refuse, sizeof t->refuse, "That folder holds the data folder.");
     else if (in_app(r)) snprintf(t->refuse, sizeof t->refuse, "That folder is inside the app.");
-    else if (!writable(r)) snprintf(t->refuse, sizeof t->refuse, "LAS Recomp can't write to that folder.");
+    else if (!writable(r)) snprintf(t->refuse, sizeof t->refuse, "PokeV-Recomp can't write to that folder.");
     else if (!same_dir(t->path, g_home) && !usable_dir(t->path))
         snprintf(t->refuse, sizeof t->refuse, "Choose an empty folder.");
 }
@@ -718,7 +741,7 @@ static bool prepare_target(const char *to, char *err, size_t n) {
     char p[1100];
     mkdirs(to);
     if (!is_dir(to) || !writable(to)) {
-        snprintf(err, n, "LAS Recomp can't write to %s.", to);
+        snprintf(err, n, "PokeV-Recomp can't write to %s.", to);
         return false;
     }
     join(p, sizeof p, to, MARK_PARTIAL);
@@ -749,7 +772,7 @@ bool rt_data_move(const char *to, void (*progress)(int step, double frac), char 
         return false;
     }
     if (has_entries(abs_to)) {
-        snprintf(err, n, "That folder already has LAS Recomp data.");
+        snprintf(err, n, "That folder already has PokeV-Recomp data.");
         return false;
     }
     Move m = {progress, 0, entries_size(from), 0, err, n, malloc(MOVE_BUF), malloc(MOVE_BUF)};

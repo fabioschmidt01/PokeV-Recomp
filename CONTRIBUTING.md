@@ -103,6 +103,17 @@ The comparison checks every generated C file byte-for-byte.
 
 `python tools/test_save.py` exercises the production save handlers against temporary files, without game data.
 
+Game identity and data folder (no game files; scratch folders only):
+`python tools/test_game_identity.py` checks that only Pokémon Violet 3.0.1 is set up and compiled (other games'
+builds refused by name), with `CC` and `CXX`. On Linux, `DEPS=<prefix with SDL3> python tools/test_data_dir.py`
+checks the data folder (`$XDG_DATA_HOME/pokev-recomp`, `~/.local/share/pokev-recomp`) and that other recomps'
+folders and game files are never touched, like `tools/test_delete_guard.py`. In the release build image, after
+`tools/za/dist-linux.sh` built the dependencies:
+
+    podman build -t pokev-linux-build -f tools/linux/Containerfile tools/linux
+    podman run --rm -v "$PWD:/src:Z" -w /src pokev-linux-build bash -c \
+      'DEPS=/src/build/linux/x86_64/deps python3.12 tools/test_data_dir.py && python3.12 tools/test_game_identity.py'
+
 Build-cache regression tests use synthetic inputs and the production scheduler:
 `python tools/test_build_cache.py` and `python tools/test_gamebuild_resume.py`.
 On Windows, also run `python tools/test_windows_processes.py` to check independent
