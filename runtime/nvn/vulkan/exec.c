@@ -3033,6 +3033,31 @@ static void debug_save_depth(TexBackend *b, const char *path) {
     LOG("[vk] saved %s (%ux%u depth %.6f..%.6f)\n", path, b->width, b->height, lo, hi);
 }
 
+// (debug frames) a depth / stencil image's stencil as a greyscale PGM of the raw values (0..255, not stretched): what
+// a shader reading it through a STENCIL view gets. Scarlet / Violet's lighting keeps each pixel's shading model in
+// bits 0..2 (models 4..7 take their own paths), bits 3..5 a second parameter, bit 6 "skip".
+static void debug_save_stencil(TexBackend *b, const char *path) {
+    if (!b || !b->image || !(b->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) || b->samples != 1) return;
+    uint64_t n = (uint64_t)b->width * b->height;
+    VkSpan out = vk_readback((n + 3) & ~3ull);
+    VkCommandBuffer cb = vk_cmd();
+    vk_full_barrier(cb);
+    VkBufferImageCopy c = {.bufferOffset = out.off, .imageSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 0, 1},
+                           .imageExtent = {b->width, b->height, 1}};
+    rec_CmdCopyImageToBuffer(cb, b->image, VK_IMAGE_LAYOUT_GENERAL, out.buf, 1, &c);
+    renderer_flush();
+    const uint8_t *d = out.ptr;
+    uint32_t hist[8] = {0};
+    for (uint64_t i = 0; i < n; i++) hist[d[i] & 7]++;
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fprintf(f, "P5 %u %u 255\n", b->width, b->height);
+    fwrite(d, 1, (size_t)n, f);
+    fclose(f);
+    LOG("[vk] saved %s (%ux%u stencil; bits 0..2: %u %u %u %u %u %u %u %u)\n", path, b->width, b->height, hist[0], hist[1],
+        hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]);
+}
+
 // (debug) LARECOMP_COPY_TRACE=<frame>: draws' attachments / sampled textures, copies and snapshots of that frame ("[ct]")
 static bool ct_on(void) {
     static const char *e = (const char *)1;
@@ -7342,6 +7367,17 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
                 snprintf(path, sizeof path, "build/textures/in_%02d_tex%d.png", ndraw, i);
                 nsave++;
                 renderer_save_texture_tex((TexBackend *)b, path);
+            }
+        }
+        // (investigation: Scarlet / Violet's blue hair) the same passes' stencil inputs, raw: build/textures/stencil_<i>.pgm
+        if (!indexed && r->x[2] == 3 && pr->fi->ntex >= 6 && st.rt.ncolor && st.rt.color[0] && st.rt.color[0]->format == 0x3F && b &&
+            pr->fi->tex[i].stencil) {
+            static int nsten;
+            if (nsten < 4) {
+                char path[80];
+                mkdir("build/textures", 0755);
+                snprintf(path, sizeof path, "build/textures/stencil_%02d_tex%d.pgm", nsten++, i);
+                debug_save_stencil((TexBackend *)b, path);
             }
         }
         if (t->format == 0x1 && t->width >= 256 && t->addr) {  // (R8 atlases, e.g. a glyph cache: guest bytes vs the GPU copy)

@@ -792,4 +792,40 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 26. Cabelo Azul, Pontinhos e Lentidão: Testes e Diagnóstico do Stencil (v0.0.20)
+
+### A. Resultado dos testes da seção 24
+- F1 > Compatibilidade > "Sobreposição CPU / GPU" e "Espelho do skinning" desligados, um de cada vez: **nada mudou**
+  (tremido, cabelo azul, pontinhos e lentidão continuam). A corrida CPU/GPU fica descartada como causa.
+- Os efeitos que o runtime de origem injeta no passe de iluminação (oclusão de ambiente, luz indireta, reflexos na água)
+  **nunca entraram em ação** no Violet: nenhuma linha `[gtao]` / `[ssgi]` / `[water]` nos logs (o detector procura o
+  passe do Z-A, com a mesma textura de profundidade nos slots 0 e 1).
+
+### B. Cabelo azul: o que o dump mostra
+- No G-buffer (albedo, `in_00_tex4`) o cabelo do personagem é roxo e a camiseta branca; logo depois do passe de
+  iluminação o cabelo sai azul puro e a camiseta azul-clara. O tom vem do passe de iluminação.
+- Segundo o usuário, começou depois da correção das listras (v0.0.14). Desde então o shader lê o stencil correto:
+  bits 0..2 = modelo de shading do pixel; os modelos 4, 5, 6 e 7 têm caminhos próprios no shader
+  (`74421cd200.frag`), com constantes por modelo em `cb3` (índice modelo x 16). Hipótese: cabelo / tecido usam um
+  desses modelos, e esse caminho tem outro defeito que antes ficava escondido pelo stencil errado.
+- Texturas de meia resolução lidas pela iluminação chegam vazias (`tex8` 0x25, `tex11` / `tex12` 0x29: zero, até o
+  alfa; `tex13` preto): nada as escreve antes da iluminação no quadro (os desenhos em 960x540 0x29 vêm depois:
+  efeitos / partículas). Pode ser normal; fica registrado.
+
+### C. Diagnóstico adicionado (somente no dump F9)
+- `build/textures/stencil_<n>_tex<i>.pgm`: o stencil lido pela iluminação, valores crus, e a contagem de pixels por
+  modelo (bits 0..2) no log. Com ele se vê qual modelo o cabelo e a camiseta usam.
+
+### D. Lentidão ("parece 15-20 fps com o contador alto")
+- O modo 60 fps do Violet é um ajuste nosso (`tools/sv_patches.py`): o jogo roda internamente em modo 30 fps, e o
+  relógio mestre recebe o tempo real de cada quadro (`rt_pla_frame_dt_ns`). Logo após o relógio o jogo escolhe um modo
+  de ritmo pelo tempo medido (16,7 / 33,3 / 50 / 66,7 ms), e o patch o fixa em 0 (60 fps). Na sessão do usuário o jogo
+  ficou em ~37-41 fps. Hipótese: partes do jogo que não usam o relógio mestre (animações etc.) avançam o passo fixo do
+  modo 60 fps a cada quadro, ou seja, câmera lenta abaixo de 60. Teste sem build: F1 > taxa de quadros em 30 fps.
+
+### E. Atualizações de Versão
+- Versão elevada para **`v0.0.20`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
