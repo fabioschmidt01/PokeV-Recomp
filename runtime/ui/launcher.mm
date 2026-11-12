@@ -105,7 +105,7 @@ static const char *build_version(const uint8_t id[8]) {
 static bool build_is_za(const uint8_t id[8]) { return build_version(id) && memcmp(id, BUILD_ID, 8); }
 // The release tag this build is (also names the release files; Makefile / tools/bundle_macos.sh / make_dmg.sh read
 // it): ZA Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
-#define LARECOMP_VERSION "v0.0.15"
+#define LARECOMP_VERSION "v0.0.16"
 extern "C" const char *rt_version(void) { return LARECOMP_VERSION; }  // (runtime/main.c: the log's first line)
 extern "C" const char *larecomp_version(void) { return LARECOMP_VERSION; }  // (the shader caches' tag)
 
@@ -424,12 +424,11 @@ static const char *fail_head(int k, bool pt) {
 static const char *fail_hint(int k, bool pt) {
     static const char *const en[] = {
         "",
-        "Choose the folder with your Pok\xc3\xa9mon Legends Z-A game extracted (exefs and romfs folders), or with your "
+        "Choose the folder with your Pok\xc3\xa9mon Violet extracted (exefs and romfs folders), or with your "
         "dump (.xci / .nsp) and your prod.keys.",
-        "Pok\xc3\xa9mon Legends Z-A's base game isn't among those files. Choose the folder with your own dump.",
+        "Pok\xc3\xa9mon Violet's base game isn't among those files. Choose the folder with your own dump.",
         "Make sure there's about 12 GB free and try again.",
-        "ZA Recomp runs versions 1.0.0, 2.0.0 and 2.0.2 of the game (base game, or base game + the 2.0.0 or 2.0.2 "
-        "update).",
+        "PokeV-Recomp runs version 3.0.1 of the game (base game + update v786432).",
         "Some files are missing. Choose the folder again; if it happens again, dump the game again.",
         "Make sure there's about 4 GB free and try again. If it keeps happening, report it on GitHub.",
         "Put the prod.keys (and title.keys) dumped from your own Switch in the folder with the game files. Any file "
@@ -437,9 +436,9 @@ static const char *fail_hint(int k, bool pt) {
         "The full reason is in lasrecomp.log next to the program."};
     static const char *const ptb[] = {
         "",
-        "Escolha a pasta com o seu Pokémon Legends: Arceus extraído (pastas exefs e romfs), ou com o seu dump (.xci / .nsp) "
+        "Escolha a pasta com o seu Pokémon Violet extraído (pastas exefs e romfs), ou com o seu dump (.xci / .nsp) "
         "e o seu prod.keys.",
-        "O jogo base de Pokémon Legends: Arceus não está entre esses arquivos. Escolha a pasta com o seu próprio dump.",
+        "O jogo base de Pokémon Violet não está entre esses arquivos. Escolha a pasta com o seu próprio dump.",
         "Veja se há uns 12 GB livres e tente de novo.",
         "O PokeV-Recomp roda a versão 3.0.1 do jogo (jogo base + atualização v786432).",
         "Faltam arquivos. Escolha a pasta de novo; se acontecer outra vez, faça o dump do jogo de novo.",
@@ -2700,7 +2699,7 @@ extern "C" void launcher_run(const char *root) {
                                                  : TR("Set up the game files to play", "Prepare os arquivos do jogo para jogar")};
                 } else {
                     // ---- ready
-                    page_title(dl, x, 104, "POKÉMON LEGENDS: ARCEUS", TR("Ready to play", "Pronto para jogar"));
+                    page_title(dl, x, 104, "POKÉMON VIOLET", TR("Ready to play", "Pronto para jogar"));
                     float ty = 196 + text(dl, F_BODY, 17, x, 196, C_SOFT, TR("Your game files are set up and the game's code "
                                                                               "is compiled for this PC.", "Os seus arquivos do "
                                                                               "jogo estão configurados e o código já foi "
@@ -3228,9 +3227,11 @@ extern "C" void launcher_run(const char *root) {
 #endif
         }
     }
-    // play: hand the window to the game
+    // play: hand the window to the game - fullscreen now, if that is the setting (the start screen always opens in a
+    // window: ui_window_init and menu_apply_window_requests leave it windowed while g_start_screen is set)
     settings_save();
     xbox_layout_before_play();
+    if (g_settings.fullscreen && !getenv("LARECOMP_WINDOW") && !getenv("LARECOMP_HIDDEN")) SDL_SetWindowFullscreen(win, true);
 #ifdef __APPLE__
     ImGui_ImplMetal_Shutdown();
 #else

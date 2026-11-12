@@ -67,7 +67,9 @@ disponíveis no menu F1; nem todos foram validados com o *Pokémon Violet* ainda
   sombras.
 - **Saída em HDR** (opção).
 - **Pacotes de texturas HD**: a opção *Originais / HD* do menu carrega texturas de substituição de `textures/hd/`.
-- **Mods**: `mods/<nome>/romfs` em camadas sobre os arquivos do jogo.
+- **Mods**: `mods/<nome>/romfs` em camadas sobre os arquivos do jogo, cada um ligado ou desligado na aba Mods da tela
+  inicial. A tradução para português do Brasil da [PKG Traduções](https://pkgtraducoes.com.br/) é instalada assim (não
+  vem incluída: baixe com eles).
 
 ### Controles
 - Controles via SDL3 (Xbox, DualShock 4, DualSense, Switch Pro Controller, Steam Deck).
@@ -137,6 +139,7 @@ alterados no menu F1.
 - **fabioschmidt01 & Antigravity**: arquitetura, multi-threading para Intel Xeon, ajustes para a Intel Arc B580,
   integração do Intel XeSS e os ports de Pokémon Violet e Arceus.
 - **Projeto Ryujinx**: referência de comportamento para o kernel do Switch e a GPU NVN.
+- **[PKG Traduções](https://pkgtraducoes.com.br/)**: o mod de tradução para português do Brasil (distribuído por eles).
 - **Bibliotecas open-source**: SDL3, FFmpeg, Dear ImGui, Vulkan Memory Allocator, Shaderc, XeGTAO, LibHac, Intel XeSS SDK.
 
 O código próprio do PokeV-Recomp está sob a [licença MIT](LICENSE); os componentes em `third_party/` mantêm as suas

@@ -2201,7 +2201,11 @@ void ui_window_init(void) {
     if (!window) FATAL("SDL_CreateWindow: %s\n", SDL_GetError());
     rt_window_icon(window);
     // the Fullscreen setting applies from the start screen on (not only once the game runs); test windows stay windows
-    if (g_settings.fullscreen && !ENV("LARECOMP_WINDOW") && !ENV("LARECOMP_HIDDEN")) SDL_SetWindowFullscreen(window, true);
+    // The start screen always opens in a window (a fullscreen start screen hid the desktop while the game was set
+    // up); the Fullscreen setting applies when PLAY hands the window to the game (launcher.mm), or here when the game
+    // starts without the start screen. Test windows stay windows.
+    extern int g_start_screen;
+    if (!g_start_screen && g_settings.fullscreen && !ENV("LARECOMP_WINDOW") && !ENV("LARECOMP_HIDDEN")) SDL_SetWindowFullscreen(window, true);
     create_instance();
     if (!SDL_Vulkan_CreateSurface(window, g_vk.inst, NULL, &g_vk.surface)) FATAL("SDL_Vulkan_CreateSurface: %s\n", SDL_GetError());
     pick_device();

@@ -277,6 +277,7 @@ bool menu_handle_event(const SDL_Event *e) {
 }
 
 extern "C" uint32_t g_window_resize_request;  // (test scripts: runtime/hle/input.c "resize")
+extern "C" int g_start_screen;  // runtime/hle/warp.c: the start screen is up (a linkage spec is namespace scope only)
 void menu_apply_window_requests(void *win) {
     SDL_Window *w = (SDL_Window *)win;
     g_pixel_density = SDL_GetWindowPixelDensity(w);
@@ -287,9 +288,12 @@ void menu_apply_window_requests(void *win) {
         else SDL_StopTextInput(w);
         text_input = want_text;
     }
-    static bool first = true;
-    if (first || g_want_fullscreen_apply.exchange(false)) {
-        first = false;
+    // On the start screen the window stays as it opened (a window) unless the menu asks; in game the setting applies
+    // at the first frame and on each change
+    static bool first_game = true;
+    bool asked = g_want_fullscreen_apply.exchange(false);
+    if (g_start_screen ? asked : (first_game || asked)) {
+        if (!g_start_screen) first_game = false;
         SDL_SetWindowFullscreen(w, g_settings.fullscreen);
     }
     if (uint32_t r = __atomic_exchange_n(&g_window_resize_request, 0u, __ATOMIC_RELAXED))
@@ -1326,7 +1330,7 @@ static void perfmon_draw(const ImVec2 &display, float scale) {
                      ram_c(0.80f, 0.45f, 0.70f, 1.0f), fps_c(0.95f, 0.95f, 0.95f, 1.0f),
                      wait_c(0.93f, 0.76f, 0.33f, 1.0f), pic_c(0.62f, 0.70f, 0.95f, 1.0f);
 
-        ImGui::TextDisabled("%s", TR("PokeV-Recomp v0.0.15, game 3.0.1", "PokeV-Recomp v0.0.15, jogo 3.0.1"));
+        ImGui::TextDisabled("%s", TR("PokeV-Recomp v0.0.16, game 3.0.1", "PokeV-Recomp v0.0.16, jogo 3.0.1"));
 
         if (ImGui::BeginTable("##perft", 4, ImGuiTableFlags_SizingFixedFit)) {
             float w0 = ImGui::CalcTextSize(TR("Frame", "Quadro")).x + 8.0f * scale;

@@ -730,4 +730,35 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 24. Tela Inicial: Nome do Jogo, Sempre em Janela; Investigação de Novos Bugs (v0.0.16)
+
+### A. Correções
+- A tela inicial mostrava "POKÉMON LEGENDS: ARCEUS" acima de "Pronto para jogar", e as dicas de erro citavam
+  Pokémon Legends Z-A / Arceus e as versões do Z-A: agora "POKÉMON VIOLET" e a versão 3.0.1.
+- A tela inicial abre sempre em janela (como no PokeL-ARecomp v0.26.2): `ui_window_init` (device.c) e
+  `menu_apply_window_requests` (menu.mm) não aplicam a tela cheia enquanto `g_start_screen` está ligado; o botão Jogar
+  aplica a configuração de tela cheia ao entregar a janela ao jogo. Sem a tela inicial, a tela cheia vale desde o início.
+- README: crédito à PKG Traduções pelo mod de tradução PT-BR, que se instala e liga/desliga pela aba Mods (não incluído).
+  **Não compilado localmente.**
+
+### B. Novos bugs relatados (11/11/2026) e o que se sabe
+- **Personagem "piscando" ao andar** (vídeo): quadros consecutivos alternam a pose das pernas, e há quadros com um risco
+  fino atravessando a tela (vértices fora do lugar).
+- **Clarão branco na iluminação** (captura de 22:54): áreas inteiras estouradas em branco com bordas suaves.
+- Hipótese principal, ainda não testada: corrida entre CPU e GPU. A sobreposição CPU/GPU está ligada (o jogo monta o
+  quadro N+1 enquanto a GPU desenha o N), mas as cópias de proteção dos storage buffers (`snap_storage`) nunca foram
+  feitas em Scarlet/Violet (`snap 0KB/0` em todos os logs): o anel de cópias fica depois da heap do jogo
+  (`kernel_heap_size()`), e sem heap ele nunca é ativado. O Hookshot (recomp de Zelda OoT) corrigiu flashes de
+  exposição com a mesma causa (NotRexed/Hookshot#645). Teste sem build: F1 > Compatibilidade > "Sobreposição CPU / GPU"
+  e "Espelho do skinning" em Desligado, um de cada vez.
+- **Cores**: no dump, o alvo sRGB do tonemap (`pass_105` / `pass_106`) parece lavado e a cópia final para a textura da
+  janela (`pass_108`, `0x25`) parece normal; a cópia lê o alvo sRGB (decodifica) e grava sem codificar, como o hardware.
+  A captura F12 da mesma sessão bate com `pass_108`. Pendente: confirmar com o usuário o que aparece na tela.
+- **Jogo "lento" acima de 30 fps**: não investigado (ritmo do relógio do jogo, `[pace]`).
+
+### C. Atualizações de Versão
+- Versão elevada para **`v0.0.16`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

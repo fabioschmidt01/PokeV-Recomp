@@ -64,7 +64,9 @@ available in the F1 menu; not all of them have been validated with *Pokémon Vio
 - **Lighting options**: ambient occlusion (XeGTAO), indirect light, water reflections, shadow resolution and sharpness.
 - **HDR output** (option).
 - **HD texture packs**: an *Original / HD* switch in the menu loads replacement textures from `textures/hd/`.
-- **Mods**: `mods/<name>/romfs` layers over the game's files.
+- **Mods**: `mods/<name>/romfs` layers over the game's files, each switched on or off in the start screen's Mods tab.
+  A Brazilian Portuguese translation by [PKG Traduções](https://pkgtraducoes.com.br/) installs this way (not included:
+  get it from them).
 
 ### Controls
 - Gamepads through SDL3 (Xbox, DualShock 4, DualSense, Switch Pro Controller, Steam Deck).
@@ -134,6 +136,7 @@ changed in the F1 menu.
 - **fabioschmidt01 & Antigravity**: architecture, Intel Xeon multi-threading, Intel Arc B580 tuning, Intel XeSS
   integration, and the Pokémon Violet & Arceus ports.
 - **Ryujinx project**: behavioural reference for the Switch kernel and the NVN GPU.
+- **[PKG Traduções](https://pkgtraducoes.com.br/)**: the Brazilian Portuguese translation mod (distributed by them).
 - **Open-source libraries**: SDL3, FFmpeg, Dear ImGui, Vulkan Memory Allocator, Shaderc, XeGTAO, LibHac, Intel XeSS SDK.
 
 PokeV-Recomp's own code is under the [MIT license](LICENSE); the components in `third_party/` keep their own licenses.
