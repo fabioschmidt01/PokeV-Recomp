@@ -761,7 +761,7 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
-## 25. Tradução da PKG na Aba Mods, Backup Automático do Save, Rótulos do F1 (v0.0.18)
+## 25. Tradução da PKG na Aba Mods, Backup Automático do Save, Rótulos do F1 (v0.0.19)
 
 ### A. Tradução PT-BR (PKG Traduções)
 - A PKG Traduções autorizou o uso da tradução com os devidos créditos. Ela **não** vai dentro da release (os arquivos são
@@ -787,7 +787,8 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ### E. Atualizações de Versão
 - A tag `v0.0.17` não compilou (duas mensagens de log do backup com a quebra de linha dentro da string, erro do
-  script que gerou o código) e não tem release. Versão elevada para **`v0.0.18`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+  script que gerou o código) e não tem release. A tag `v0.0.18` foi criada por engano no mesmo commit quebrado
+  (também sem release). A correção sai como **`v0.0.19`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
 
 ---
 
