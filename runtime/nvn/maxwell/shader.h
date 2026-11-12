@@ -124,6 +124,10 @@ extern bool maxwell_gmem_lazy;
 // The straight-line form of forward-only branches (glsl_flatten) unless LARECOMP_SHADER_FLAT says otherwise: the
 // runtime sets it before the first translation (Vulkan: off on AMD GPUs, exec.c vk_exec_init).
 extern bool maxwell_flat_default;
+// (GLSL) Gathers (TLD4 / TLD4S) move their coordinates by the smallest step at this many sub-texel bits, so a host
+// that rounds a coordinate between two texels unlike Maxwell picks the same texels (translate.c gather_bias). 0: as
+// written. The runtime sets it before the first translation (Vulkan: AMD / Intel on Windows, exec.c vk_exec_init).
+extern uint32_t maxwell_gather_bias_bits;
 // Lazy mode, fragment: a shader without discard / depth output / stores declares early fragment tests (its GMiss
 // atomics would turn them off); one with discard / depth output (no stores) counts no misses - the
 // runtime imports the bound storage buffers' chunks before the draw. true (LARECOMP_VK_GMEM_FS_MISS=1): every shader

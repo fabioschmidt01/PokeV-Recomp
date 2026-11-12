@@ -31,6 +31,7 @@ uint64_t maxwell_gmem_base, maxwell_gmem_size;
 uint32_t maxwell_gmem_chunk_shift;  // 0: one buffer for the whole heap (GLSL; shader.h)
 bool maxwell_gmem_lazy;
 bool maxwell_flat_default = true;
+uint32_t maxwell_gather_bias_bits;  // (shader.h) 0: gathers as written
 bool maxwell_gmem_fs_miss;
 const uint8_t *maxwell_dbg_code;
 uint32_t maxwell_dbg_pc;
@@ -932,6 +933,17 @@ static void emit_atom(Ctx *c, uint64_t w, bool red) {
     sp(&c->body, "    }\n");
 }
 
+// The gather bias (maxwell_gather_bias_bits, shader.h): Maxwell picks a gather's four texels with its own rounding when
+// the coordinate sits exactly between two texels; AMD's and Intel's Windows drivers round the other way, and the
+// gather takes the next texel over - lines and specks along object edges where a filter gathers depth or a half-size
+// buffer (Ryujinx's TexturePass.InsertCoordGatherBias, MIT; KarPur's GATHER_BIAS for Violet on AMD). Each normalised
+// coordinate moves by the smallest step that changes the texel at the host's sub-texel precision: 1 / (size << (bits
+// + 1)). Cube gathers move their first two components, as Ryujinx's. `xy` is a vec2 expression; out gets it biased.
+static void gather_bias(int slot, const char *xy, char *out, size_t n) {
+    if (!maxwell_gather_bias_bits) snprintf(out, n, "%s", xy);
+    else snprintf(out, n, "(%s + vec2(1.0) / (vec2(tsize%d(0).xy) * %u.0))", xy, slot, 1u << (maxwell_gather_bias_bits + 1));
+}
+
 // TLD4S (2D gather, one component or a depth compare; per Ryujinx's EmitTexs Tld4s): x in Ra, y in Rb - or y in Ra+1
 // when Rb holds the offset (.AOFFI: 6-bit signed x, y at bits 0 / 8) and / or the depth reference (.DC, after the
 // offset). Results as TEXS: two components (Rd, Rd+1), four with Rd2 (Rd2, Rd2+1); .F16 (0xdf8) packs them.
@@ -949,12 +961,13 @@ static void emit_tld4s(Ctx *c, uint64_t w) {
     const char *dref = dc ? (aoffi ? B1 : Bv) : NULL;
     int slot = tex_slot(c, index, TEXTYPE_2D, dc, false);
     if (c->fail) return;
-    char P[512], call[1200];
+    char P0[512], P[640], call[1400];
     if (aoffi)  // (GLSL gather offsets must be constant: move the coordinates instead, as glsl_sample does)
-        snprintf(P, sizeof P, "(vec2(as_type<float>(%s), as_type<float>(%s)) + vec2(bitfieldExtract(int(%s), 0, 6), "
+        snprintf(P0, sizeof P0, "(vec2(as_type<float>(%s), as_type<float>(%s)) + vec2(bitfieldExtract(int(%s), 0, 6), "
                  "bitfieldExtract(int(%s), 8, 6)) / vec2(tsize%d(0).xy))", A, y, Bv, Bv, slot);
     else
-        snprintf(P, sizeof P, "vec2(as_type<float>(%s), as_type<float>(%s))", A, y);
+        snprintf(P0, sizeof P0, "vec2(as_type<float>(%s), as_type<float>(%s))", A, y);
+    gather_bias(slot, P0, P, sizeof P);
     if (dc) snprintf(call, sizeof call, "textureGather(t%d, %s, as_type<float>(%s))", slot, P, dref);
     else snprintf(call, sizeof call, "textureGather(t%d, %s, %d)", slot, P, comp);
     write_tex_result(c, slot, call, d1 == RZ ? 3u : 15u, d0, d1, true, f16);
@@ -988,26 +1001,27 @@ static void emit_tld4(Ctx *c, uint64_t w) {
     for (int i = 0; i < (cube ? 3 : 2); i++) snprintf(co[i], sizeof co[i], "as_type<float>(%s)", tld4_next(c, &ra, b[1 + i]));
     for (int i = 0; i < (toff == 2 ? 2 : toff == 1 ? 1 : 0); i++) snprintf(off[i], sizeof off[i], "int(%s)", tld4_next(c, &rb, b[4 + i]));
     if (dc) snprintf(dref, sizeof dref, "as_type<float>(%s)", tld4_next(c, &rb, b[6]));
-    char gather[8][700];
+    char gather[8][1000];
     int ngather = toff == 2 ? 4 : 1;
     for (int k = 0; k < ngather; k++) {
-        char xy[400], P[600];
+        char xy0[400], xy[520], P[900];
         if (toff) {  // offset k: register k / 4's byte pair (k & 3) * 8 ... (x at bit 0 / 16, y at 8 / 24 of its register)
             const char *o = off[toff == 2 ? (k * 2) / 4 : 0];
             int bx = toff == 2 ? ((k * 2) & 3) * 8 : 0;
-            snprintf(xy, sizeof xy, "(vec2(%s, %s) + vec2(bitfieldExtract(%s, %d, 6), bitfieldExtract(%s, %d, 6)) / vec2(tsize%d(0).xy))",
+            snprintf(xy0, sizeof xy0, "(vec2(%s, %s) + vec2(bitfieldExtract(%s, %d, 6), bitfieldExtract(%s, %d, 6)) / vec2(tsize%d(0).xy))",
                      co[0], co[1], o, bx, o, bx + 8, slot);
         } else {
-            snprintf(xy, sizeof xy, "vec2(%s, %s)", co[0], co[1]);
+            snprintf(xy0, sizeof xy0, "vec2(%s, %s)", co[0], co[1]);
         }
-        if (cube && array) snprintf(P, sizeof P, "vec4(%s, %s, %s, %s)", co[0], co[1], co[2], lay);
-        else if (cube) snprintf(P, sizeof P, "vec3(%s, %s, %s)", co[0], co[1], co[2]);
+        gather_bias(slot, xy0, xy, sizeof xy);  // (cubes: no offsets, so xy is their first two components, biased)
+        if (cube && array) snprintf(P, sizeof P, "vec4(%s, %s, %s)", xy, co[2], lay);
+        else if (cube) snprintf(P, sizeof P, "vec3(%s, %s)", xy, co[2]);
         else if (array) snprintf(P, sizeof P, "vec3(%s, %s)", xy, lay);
         else snprintf(P, sizeof P, "%s", xy);
         if (dc) snprintf(gather[k], sizeof gather[k], "textureGather(t%d, %s, %s)", slot, P, dref);
         else snprintf(gather[k], sizeof gather[k], "textureGather(t%d, %s, %d)", slot, P, comp);
     }
-    char call[4096];
+    char call[4200];
     if (ngather == 4)
         snprintf(call, sizeof call, "vec4((%s).x, (%s).y, (%s).z, (%s).w)", gather[0], gather[1], gather[2], gather[3]);
     else
@@ -3230,8 +3244,10 @@ static uint64_t cache_key(const uint8_t *blob, size_t max_size, int stage, const
     for (size_t i = 0; i < end; i++)
         if ((((const uint64_t *)code)[i] & 0xfff0000000000000ull) == 0xe250000000000000ull) return 0;  // BRX
     // (the straight-line switch is in the key: on and off translations of one shader differ, and a GPU that changes
-    // the default - AMD - or a player's LARECOMP_SHADER_FLAT must not load the other form)
-    uint64_t v[5] = {(uint64_t)stage, max_size, maxwell_gmem_base, maxwell_gmem_size, (uint64_t)maxwell_flat_on()};
+    // the default - AMD - or a player's LARECOMP_SHADER_FLAT must not load the other form; the gather bias likewise,
+    // for a player who changes GPUs or sets LARECOMP_GATHER_BIAS)
+    uint64_t v[6] = {(uint64_t)stage, max_size, maxwell_gmem_base, maxwell_gmem_size, (uint64_t)maxwell_flat_on(),
+                     (uint64_t)maxwell_gather_bias_bits};
     uint64_t h = fnv(fnv(fnv(0xcbf29ce484222325ull, cache_build, sizeof cache_build), v, sizeof v), key, sizeof *key);
     h = fnv(h, blob, (size_t)(code - blob) + end * 8);
     return h ? h : 1;

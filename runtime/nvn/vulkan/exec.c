@@ -1415,6 +1415,24 @@ void vk_exec_init(void) {
     if (!getenv("LARECOMP_SHADER_FLAT") && !maxwell_flat_default)
         LOG("[vk] straight-line shader form off (%s; LARECOMP_SHADER_FLAT=1: on)\n",
             fcs == GPU_OFF ? "F1 > Compatibility" : "this AMD GPU, F1 > Compatibility to turn it on");
+    // The gather bias (translate.c gather_bias): AMD's and Intel's Windows drivers round a gather coordinate that sits
+    // between two texels unlike Maxwell, as Ryujinx's Vulkan back end (MIT) biases for (gatherBiasPrecision: the
+    // sub-texel precision bits on IsIntelWindows / IsAmdWindows) and KarPur for Violet on AMD (its GATHER_BIAS) -
+    // suspected for the white specks along object edges on an Intel Arc B580. NVIDIA rounds as Maxwell does, and
+    // Mesa's drivers aren't in Ryujinx's list. LARECOMP_GATHER_BIAS=<bits> forces it (0: off).
+    {
+        const char *e = getenv("LARECOMP_GATHER_BIAS");
+        uint32_t vendor = g_vk.props.vendorID, bits = 0;
+#ifdef _WIN32
+        if (vendor == 0x8086 || vendor == 0x1002) bits = g_vk.props.limits.subTexelPrecisionBits;
+#endif
+        if (e) bits = (uint32_t)atoi(e);
+        if (bits > 16) bits = 16;
+        maxwell_gather_bias_bits = bits;
+        if (bits) LOG("[vk] gather coordinates biased for %u sub-texel bits (%s)\n", bits,
+                      e ? "LARECOMP_GATHER_BIAS" : "this AMD / Intel GPU; LARECOMP_GATHER_BIAS=0: off");
+        else LOG("[vk] gather coordinates as written%s\n", e ? " (LARECOMP_GATHER_BIAS=0)" : "");
+    }
     prof = getenv("LARECOMP_VK_PROF") != NULL;
     if (prof) prof_up_ns = 0;
     // the GPU timer (LARECOMP_VK_GPU_TIMER=0: off - dynamic resolution then goes by the frame times)

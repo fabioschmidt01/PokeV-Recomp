@@ -894,4 +894,23 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 30. Deslocamento do textureGather em Intel / AMD (v0.0.24)
+
+- Origem: análise do KarPur (github.com/Grunttanamo/KarPur, MIT, outro recomp de Violet). Em AMD eles tinham linhas
+  escuras nas bordas dos objetos: os drivers de AMD e Intel no Windows arredondam diferente do Maxwell uma coordenada
+  de gather que cai exatamente entre dois texels, e o gather pega o texel vizinho.
+- Correção (a mesma do Ryujinx, `TexturePass.InsertCoordGatherBias`, MIT): cada coordenada normalizada de um TLD4 /
+  TLD4S anda o menor passo que muda o texel na precisão de sub-texel do host, 1 / (tamanho x 2^(bits+1)); gathers de
+  cubo movem os dois primeiros componentes.
+- `runtime/nvn/maxwell/translate.c` `gather_bias` (TLD4 e TLD4S); `maxwell_gather_bias_bits` em `shader.h`, entra na
+  chave do cache de traduções; `runtime/nvn/vulkan/exec.c` `vk_exec_init` liga em Intel / AMD no Windows com
+  `subTexelPrecisionBits` (NVIDIA e Mesa: desligado, como no Ryujinx). `LARECOMP_GATHER_BIAS=<bits>` força
+  (`0`: desliga). Log: `[vk] gather coordinates biased for N sub-texel bits`.
+- Suspeita para os pontinhos brancos nas bordas dos triângulos na Arc B580. Só runtime: **o jogo não recompila**; as
+  traduções de shader em cache são refeitas.
+- **Não validado em jogo** no momento deste registro.
+- Versão elevada para **`v0.0.24`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*
