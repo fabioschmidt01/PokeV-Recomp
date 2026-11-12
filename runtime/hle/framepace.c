@@ -125,13 +125,16 @@ bool rt_sv_slot_dt(void) {
     return on;
 }
 
+static uint64_t g_frame_dt_ns;  // (rt_pla_frame_dt_ns: the frame time handed out this frame, smoothed; 0 before the first)
+bool rt_sv_slot_dt(void);
 // Pokémon Legends: Arceus & Pokémon Scarlet & Violet dynamic frame delta-time:
 // Supplies the real wall-clock frame duration in nanoseconds (clamped to [16.67 ms, 50.0 ms] when 60 FPS is on),
 // so the game runs at 1.0x normal speed at 60 FPS (no 2x speed-up) AND stays at 1.0x speed if FPS dips below 60.
 uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns) {
     bool fps60 = rt_pla_is_60fps();
     uint64_t target_ns = fps60 ? 0x00fe502bull : (default_ns ? default_ns : 0x01fca056ull);
-    static uint64_t last_ns, cur_dt_ns;
+    static uint64_t last_ns;
+    uint64_t cur_dt_ns = g_frame_dt_ns;
     static int logged_mode = -1;
     if (logged_mode != (int)fps60) {
         logged_mode = (int)fps60;
@@ -140,7 +143,7 @@ uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns) {
     }
     if (!fps60) {
         last_ns = 0;
-        cur_dt_ns = target_ns;
+        g_frame_dt_ns = target_ns;
         return target_ns;
     }
     if (slot == 0 || !cur_dt_ns) {
@@ -159,7 +162,16 @@ uint64_t rt_pla_frame_dt_ns(uint32_t slot, uint64_t default_ns) {
             cur_dt_ns = cur_dt_ns ? (cur_dt_ns * 3 + real_ns) / 4 : real_ns;
         }
     }
+    g_frame_dt_ns = cur_dt_ns;
     return cur_dt_ns;
+}
+
+// Scarlet / Violet's SetSlotMode (sv_patches.py _sv_slot_mode): the 60 fps mode's duration (16.67 ms, table entry 0)
+// becomes the frame time measured this frame by the frame clock patch (rt_pla_frame_dt_ns) - every clock slot steps
+// by real time; other modes' durations stay as the table has them. LARECOMP_SV_SLOT_DT=0: the table's value.
+uint64_t rt_sv_slot_duration(uint64_t table_ns) {
+    if (table_ns != 0x00fe502bull || !g_frame_dt_ns || !rt_pla_is_60fps() || !rt_sv_slot_dt()) return table_ns;
+    return g_frame_dt_ns;
 }
 
 

@@ -878,4 +878,20 @@ listras por triângulo em tudo que é iluminado. Céu, HUD e minimapa não passa
 
 ---
 
+## 29. Todos os Relógios pelo Tempo Real, como no Arceus (v0.0.23)
+
+- Comparado com o PokeZ-ARecomp (Arceus), que roda liso a 45-50 fps: o patch `_pla_frame_dt_step` dele troca a
+  leitura da tabela de durações dentro de `SetSlotMode` (`ldr x2, [x8, w2, sxtw #3]`) pelo tempo real - todos os
+  slots de todos os gerenciadores de relógio, não só o relógio mestre.
+- No Violet a mesma instrução está nas três implementações de `SetSlotMode`: 0x7002b7b310, 0x7002b7b33c (2 slots) e
+  0x700092dd28 (7 slots). `_sv_slot_mode` a substitui por `rt_sv_slot_duration`: a duração do modo 60 fps
+  (16,67 ms) vira o tempo do quadro **já medido** pelo patch do relógio (uma segunda medição no mesmo quadro veria
+  microssegundos e puxaria a média para baixo); os outros modos ficam com o valor da tabela.
+- Junto com a escrita direta nos slots 0 e 1 antes da simulação (seção 28), cobre o quadro atual e os seguintes.
+- A v0.0.22 (só slots 0 e 1) não foi instalada: a v0.0.23 a substitui. **O jogo recompila uma vez.**
+- **Não validado em jogo** no momento deste registro.
+- Versão elevada para **`v0.0.23`** em `runtime/ui/launcher.mm` e `runtime/ui/menu.mm`.
+
+---
+
 *Documento mantido em sincronia contínua pelo assistente de IA Antigravity (Google DeepMind).*

@@ -35,6 +35,21 @@ def _sv_frame_clock(gen, a):
             f'  /* {a:#x}: SV 3.0.1 dynamic frame clock delta-time (ns), into clock slots 0 and 1 */')
 
 
+def _sv_slot_mode(gen, a):
+    # SetSlotMode(slot, mode)'s table load, ldr x2, [x8, w2, sxtw #3] (x8: the duration table at 0x7003c2fba8): the
+    # duration it hands SetSlotDuration for the slot. As Arceus's _pla_frame_dt_step (pla_patches.py, 0x7002783050 -
+    # the same instruction; Arceus plays smooth at 45-50 fps): the 60 fps mode's 16.67 ms becomes the real frame time,
+    # for every slot of every clock manager. Unlike Arceus it doesn't measure (the frame clock patch above already does,
+    # once a frame: a second measuring call would see a few microseconds and drag the average down) - it takes the
+    # frame time measured this frame (rt_sv_slot_duration). Three implementations call it: 0x7002b7b308 and
+    # 0x7002b7b334 (two slots) and 0x700092dd20 (seven).
+    w = struct.unpack_from('<I', gen.nso.image, a - gen.base)[0]
+    assert w == 0xf862d902, hex(w)  # ldr x2, [x8, w2, sxtw #3]
+    return ('{ extern uint64_t rt_sv_slot_duration(uint64_t table_ns); '
+            'c->x[2] = rt_sv_slot_duration(LD64(c->x[8] + ((int64_t)(int32_t)c->x[2] << 3))); }'
+            f'  /* {a:#x}: SV 3.0.1 clock slot duration: the real frame time in the 60 fps mode */')
+
+
 def _sv_frame_pace(gen, a):
     # 0x7002b7a858: ldrsb w20, [x10, #0x20]
     # In Pokémon Scarlet & Violet 3.0.1, [x10 + 0x20] is the game's target frame mode (1 for 30 FPS, 0 for 60 FPS).
@@ -57,5 +72,8 @@ def sv_patches(build):
         return {
             0x7002b7a784: _sv_frame_clock,
             0x7002b7a858: _sv_frame_pace,
+            0x7002b7b310: _sv_slot_mode,
+            0x7002b7b33c: _sv_slot_mode,
+            0x700092dd28: _sv_slot_mode,
         }
     return {}
