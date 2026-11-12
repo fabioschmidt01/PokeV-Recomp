@@ -15,6 +15,16 @@
 
 ---
 
+> [!WARNING]
+> **Work in progress: expect bugs and crashes.**
+> PokeV-Recomp is still at an early stage. Even in my own testing and my friends', there are graphical glitches,
+> performance drops and crashes, and you will probably run into others. Please be patient, and help us by
+> [reporting bugs and crashes](../../issues) (with your `logs/play.log` file when you can): every report helps
+> improve the project.
+>
+> **Development will be slower for a while**, as my main focus right now is
+> [PokeL-ARecomp](https://github.com/fabioschmidt01/PokeL-ARecomp).
+
 **PokeV-Recomp** (SV Recomp) turns the Nintendo Switch code of *Pokémon Violet* into a native 64-bit program for
 Windows (and Linux, untested so far).
 The game's ARM64 machine code is translated ahead of time into C and compiled for x86-64 on your own PC. The Switch's
